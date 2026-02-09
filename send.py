@@ -4,7 +4,7 @@ from discord.ext import commands
 from discord import app_commands
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = 1452967364470505565
+GUILD_ID = 1449298346425585768
 
 # ======================
 # INTENTS
@@ -180,3 +180,4 @@ if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN environment variable not set")
 
 bot.run(TOKEN)
+
