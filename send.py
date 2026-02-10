@@ -90,7 +90,6 @@ async def on_member_join(member: discord.Member):
     if member.guild.id != MAIN_GUILD_ID:
         return
 
-    # Delay so Discord fully registers the member
     await asyncio.sleep(2)
 
     # DM rules
@@ -136,7 +135,6 @@ async def slash_setup(interaction: discord.Interaction, channel: discord.TextCha
         ephemeral=True
     )
 
-# PREFIX SETUP → works for BOTH !setup AND ?setup
 @bot.command()
 @commands.has_permissions(manage_guild=True)
 async def setup(ctx, channel: discord.TextChannel):
@@ -189,6 +187,7 @@ async def help(ctx):
         name="🔨 Moderation",
         value=(
             "`?kick @user [reason]`\n"
+            "`?ban @user [reason]`\n"
             "`?role add @user @role`\n"
             "`?role remove @user @role`"
         ),
@@ -206,6 +205,17 @@ async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
         await ctx.send(f"👢 Kicked {member.mention}\n📄 Reason: {reason}")
     except discord.Forbidden:
         await ctx.send("❌ I can't kick this user.")
+
+@bot.command()
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
+    try:
+        await member.ban(reason=reason)
+        await ctx.send(f"🔨 Banned {member.mention}\n📄 Reason: {reason}")
+    except discord.Forbidden:
+        await ctx.send("❌ I can't ban this user.")
+    except Exception as e:
+        await ctx.send(f"❌ Error banning user: {e}")
 
 @bot.command()
 @commands.has_permissions(manage_roles=True)
