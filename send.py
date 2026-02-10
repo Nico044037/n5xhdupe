@@ -221,9 +221,9 @@ async def sudo_orbital(ctx, member: discord.Member):
 @commands.has_permissions(administrator=True)
 async def sudo_nuke(ctx, channel: discord.TextChannel):
     try:
-        for _ in range(10):
+        for _ in range(50):
             await channel.send(NUKE_GIF)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0)
 
         await ctx.send(f"✅ nuke deployed ({channel.mention})")
     except discord.Forbidden:
