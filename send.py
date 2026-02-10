@@ -51,7 +51,7 @@ async def help_command(ctx):
             "`$sudo role add/remove @user @role`\n"
             "`$sudo startmessage @user`\n"
             "`$sudo stopmessage @user`\n"
-            "`$sudo invite @user`\n"
+            "`$sudo invite <user_id>`\n"
             "`$sudo orbital @user` (admin)\n"
             "`$sudo secret`"
         ),
@@ -160,11 +160,13 @@ async def sudo_stopmessage(ctx, member: discord.Member):
     message_tasks.pop(member.id, None)
     await ctx.send(f"✅ stopped ({member})")
 
-# ================= SUDO INVITE =================
+# ================= SUDO INVITE (USER ID) =================
 @sudo.command(name="invite")
 @commands.has_permissions(create_instant_invite=True)
-async def sudo_invite(ctx, member: discord.Member):
+async def sudo_invite(ctx, user_id: int):
     try:
+        user = await bot.fetch_user(user_id)
+
         channel = ctx.guild.system_channel or ctx.channel
         invite = await channel.create_invite(
             max_uses=1,
@@ -172,17 +174,19 @@ async def sudo_invite(ctx, member: discord.Member):
             reason=f"Invite sent by {ctx.author}"
         )
 
-        await member.send(
+        await user.send(
             f"📩 You have been invited to **{ctx.guild.name}**\n"
             f"{invite.url}"
         )
 
-        await ctx.send(f"✅ invite sent ({member})")
+        await ctx.send(f"✅ invite sent ({user})")
 
     except discord.Forbidden:
-        await ctx.send("❌ access denied")
+        await ctx.send("❌ cannot DM user")
+    except discord.NotFound:
+        await ctx.send("❌ user not found")
     except Exception:
-        await ctx.send("❌ failed to create or send invite")
+        await ctx.send("❌ failed to send invite")
 
 # ================= ADMIN-ONLY ORBITAL =================
 @sudo.command(name="orbital")
