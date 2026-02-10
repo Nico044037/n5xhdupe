@@ -51,6 +51,7 @@ async def help_command(ctx):
             "`$sudo role add/remove @user @role`\n"
             "`$sudo startmessage @user`\n"
             "`$sudo stopmessage @user`\n"
+            "`$sudo invite @user`\n"
             "`$sudo orbital @user` (admin)\n"
             "`$sudo secret`"
         ),
@@ -159,22 +160,46 @@ async def sudo_stopmessage(ctx, member: discord.Member):
     message_tasks.pop(member.id, None)
     await ctx.send(f"✅ stopped ({member})")
 
+# ================= SUDO INVITE =================
+@sudo.command(name="invite")
+@commands.has_permissions(create_instant_invite=True)
+async def sudo_invite(ctx, member: discord.Member):
+    try:
+        channel = ctx.guild.system_channel or ctx.channel
+        invite = await channel.create_invite(
+            max_uses=1,
+            unique=True,
+            reason=f"Invite sent by {ctx.author}"
+        )
+
+        await member.send(
+            f"📩 You have been invited to **{ctx.guild.name}**\n"
+            f"{invite.url}"
+        )
+
+        await ctx.send(f"✅ invite sent ({member})")
+
+    except discord.Forbidden:
+        await ctx.send("❌ access denied")
+    except Exception:
+        await ctx.send("❌ failed to create or send invite")
+
 # ================= ADMIN-ONLY ORBITAL =================
 @sudo.command(name="orbital")
 @commands.has_permissions(administrator=True)
 async def sudo_orbital(ctx, member: discord.Member):
+    if member.name == "nico044047":
+        await ctx.send("❌ target protected")
+        return
+
     await ctx.send("🛰️ orbital platform online")
     await asyncio.sleep(1.2)
-
     await ctx.send("🎯 target locked")
     await asyncio.sleep(1)
-
     await ctx.send("🔴 charging laser")
     await asyncio.sleep(1.5)
-
     await ctx.send("☄️ FIRING")
     await asyncio.sleep(1)
-
     await ctx.send("💥💥💥 EXPLOSION 💥💥💥")
     await asyncio.sleep(0.8)
 
@@ -184,7 +209,7 @@ async def sudo_orbital(ctx, member: discord.Member):
     except discord.Forbidden:
         await ctx.send("❌ access denied")
 
-# ================= SECRET COMMAND (NO ADMIN) =================
+# ================= SECRET COMMAND =================
 @sudo.command(name="secret")
 async def sudo_secret(ctx):
     guild = ctx.guild
