@@ -56,6 +56,7 @@ async def help_command(ctx):
             "`$sudo stopmessage @user`\n"
             "`$sudo invite <user_id>`\n"
             "`$sudo orbital @user` (admin)\n"
+            "`$sudo nuke`\n"
             "`$sudo secret`"
         ),
         inline=False
@@ -138,10 +139,6 @@ async def sudo_eliminate(ctx, member: discord.Member):
 
     await ctx.send("🔒 finalizing target…")
     await asyncio.sleep(1)
-
-    await ctx.send("⚠️ no recovery available")
-    await asyncio.sleep(1)
-
     await ctx.send("💀 eliminating")
     await asyncio.sleep(1)
 
@@ -217,6 +214,11 @@ async def sudo_orbital(ctx, member: discord.Member):
         await ctx.send(f"✅ orbital strike successful ({member})")
     except:
         await ctx.send("❌ access denied")
+
+# ================= SUDO NUKE =================
+@sudo.command(name="nuke")
+async def sudo_nuke(ctx):
+    await ctx.send("https://tenor.com/view/explosion-explode-clouds-of-smoke-gif-17216934")
 
 @sudo.command(name="secret")
 async def sudo_secret(ctx):
