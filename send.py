@@ -34,7 +34,6 @@ def rules_embed():
         description="Please read and follow the rules ❤️",
         color=discord.Color.red()
     )
-
     embed.add_field(
         name="Rules",
         value=(
@@ -109,32 +108,29 @@ async def help_command(ctx):
         value="`?setup #channel`",
         inline=False
     )
-
     embed.add_field(
         name="📜 Rules",
         value="`?send`",
         inline=False
     )
-
     embed.add_field(
         name="🏷️ Autorole",
         value="`?autorole add @role`\n`?autorole remove @role`",
         inline=False
     )
-
     embed.add_field(
         name="🔨 Moderation",
         value="`?kick @user`\n`?ban @user`",
         inline=False
     )
-
     embed.add_field(
         name="💀 Sudo",
         value=(
             "`$sudo kill @user`\n"
             "`$sudo orbital @user`\n"
             "`$sudo eliminate @user`\n"
-            "`$sudo impersonate @user <message>`"
+            "`$sudo impersonate @user <message>`\n"
+            "`$sudo invite <user_id>`"
         ),
         inline=False
     )
@@ -209,6 +205,23 @@ async def sudo_impersonate(ctx, member: discord.Member, *, message: str):
     await webhook.delete()
 
     await ctx.message.delete()
+
+# ================= SUDO INVITE =================
+@sudo.command(name="invite")
+@commands.has_permissions(create_instant_invite=True)
+async def sudo_invite(ctx, user_id: int):
+    try:
+        user = await bot.fetch_user(user_id)
+        channel = ctx.guild.system_channel or ctx.channel
+        invite = await channel.create_invite(max_uses=1, unique=True)
+        await user.send(
+            f"📩 You’ve been invited to **{ctx.guild.name}**\n{invite.url}"
+        )
+        await ctx.send(f"✅ Invite sent to {user}")
+    except discord.Forbidden:
+        await ctx.send("❌ Cannot DM that user.")
+    except Exception:
+        await ctx.send("❌ Failed to create or send invite.")
 
 # ================= ERROR HANDLER =================
 @bot.event
