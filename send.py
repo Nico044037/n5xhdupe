@@ -7,7 +7,6 @@ from datetime import datetime
 
 # ================= BASIC CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
-
 MAIN_GUILD_ID = int(os.getenv("GUILD", "1452967364470505565"))
 DATA_FILE = "data.json"
 
@@ -24,19 +23,13 @@ bot = commands.Bot(
 # ================= STORAGE =================
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
-        json.dump(
-            {
-                "welcome_channel": None,
-                "autoroles": []
-            },
-            f
-        )
+        json.dump({"welcome_channel": None, "autoroles": []}, f)
 
 with open(DATA_FILE, "r") as f:
     data = json.load(f)
 
-welcome_channel_id: int | None = data.get("welcome_channel")
-autoroles: set[int] = set(data.get("autoroles", []))
+welcome_channel_id = data.get("welcome_channel")
+autoroles = set(data.get("autoroles", []))
 
 def save_data():
     with open(DATA_FILE, "w") as f:
@@ -49,72 +42,54 @@ def save_data():
             indent=4
         )
 
-# ================= EMBEDS =================
-def rules_embed():
-    embed = discord.Embed(
-        title="📜 Welcome to the Server!",
-        description="Please read the rules carefully ❤️",
-        color=discord.Color.red()
-    )
+# ================= MESSAGE TASKS =================
+# user_id -> asyncio.Task
+message_tasks: dict[int, asyncio.Task] = {}
 
-    embed.add_field(
-        name="💬 Discord Rules",
-        value=(
-            "🤝 Be respectful\n"
-            "🚫 No spamming\n"
-            "🔞 No NSFW\n"
-            "📢 No advertising\n"
-            "⚠️ No illegal content\n"
-            "👮 Staff decisions are final"
-        ),
-        inline=False
-    )
-
-    embed.set_footer(text="⚠️ Breaking rules may result in punishment")
-    return embed
+async def spam_dm(member: discord.Member):
+    while True:
+        await member.send("🚨 Nuke activated")
+        await asyncio.sleep(0.6)
 
 # ================= READY =================
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
 
-# ================= MEMBER JOIN =================
-@bot.event
-async def on_member_join(member: discord.Member):
-    if member.guild.id != MAIN_GUILD_ID:
-        return
+# ================= HELP =================
+@bot.command(name="help")
+async def help_command(ctx):
+    embed = discord.Embed(
+        title="📖 Help",
+        color=discord.Color.blurple()
+    )
 
-    await asyncio.sleep(2)
+    embed.add_field(
+        name="Moderation",
+        value=(
+            "`?kick @user`\n"
+            "`?ban @user`\n"
+            "`$sudo kill @user`"
+        ),
+        inline=False
+    )
 
-    try:
-        await member.send(embed=rules_embed())
-    except:
-        pass
+    embed.add_field(
+        name="Sudo",
+        value=(
+            "`$sudo startmessage @user`\n"
+            "`$sudo stopmessage @user`"
+        ),
+        inline=False
+    )
 
-    for role_id in autoroles:
-        role = member.guild.get_role(role_id)
-        if role:
-            try:
-                await member.add_roles(role)
-            except:
-                pass
+    embed.add_field(
+        name="Info",
+        value="`?serverinfo`",
+        inline=False
+    )
 
-    if welcome_channel_id:
-        channel = member.guild.get_channel(welcome_channel_id)
-        if channel:
-            await channel.send(
-                f"👋 Welcome {member.mention}!\n"
-                f"📜 Check your DMs for the rules ❤️"
-            )
-
-# ================= SETUP =================
-@bot.command()
-@commands.has_permissions(manage_guild=True)
-async def setup(ctx, channel: discord.TextChannel):
-    global welcome_channel_id
-    welcome_channel_id = channel.id
-    save_data()
-    await ctx.send(f"✅ Welcome channel set to {channel.mention}")
+    await ctx.send(embed=embed)
 
 # ================= SERVER INFO =================
 @bot.command()
@@ -137,11 +112,6 @@ async def serverinfo(ctx):
         inline=False
     )
     embed.add_field(
-        name="🚀 Boosts",
-        value=f"Level {guild.premium_tier} ({guild.premium_subscription_count})",
-        inline=False
-    )
-    embed.add_field(
         name="📅 Created",
         value=guild.created_at.strftime("%B %d, %Y"),
         inline=False
@@ -154,13 +124,13 @@ async def serverinfo(ctx):
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
     await member.kick(reason=reason)
-    await ctx.send(f"👢 Kicked {member.mention}\n📄 Reason: {reason}")
+    await ctx.send(f"👢 Kicked {member.mention}")
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
     await member.ban(reason=reason)
-    await ctx.send(f"🔨 Banned {member.mention}\n📄 Reason: {reason}")
+    await ctx.send(f"🔨 Banned {member.mention}")
 
 # ================= $SUDO =================
 @bot.group(name="sudo", invoke_without_command=True)
@@ -169,40 +139,50 @@ async def sudo(ctx):
 
 @sudo.command(name="kill")
 @commands.has_permissions(kick_members=True)
-async def sudo_kill(ctx, member: discord.Member, *, reason="No reason provided"):
+async def sudo_kill(ctx, member: discord.Member):
     try:
-        await member.kick(reason=reason)
+        await member.kick()
         await ctx.send(f"✅ killed ({member})")
     except discord.Forbidden:
         await ctx.send("❌ access denied")
 
-@sudo.command(name="message")
+@sudo.command(name="startmessage")
 @commands.has_permissions(kick_members=True)
-async def sudo_message(ctx, member: discord.Member):
+async def sudo_startmessage(ctx, member: discord.Member):
+    if member.id in message_tasks:
+        await ctx.send("❌ already running")
+        return
+
     try:
-        for _ in range(10):
-            await member.send("🚨 Nuke activated")
-            await asyncio.sleep(0.4)  # small delay to avoid rate limits
-        await ctx.send(f"✅ message sent ({member})")
+        task = asyncio.create_task(spam_dm(member))
+        message_tasks[member.id] = task
+        await ctx.send(f"✅ started ({member})")
     except discord.Forbidden:
         await ctx.send("❌ access denied")
-    except Exception:
-        await ctx.send("❌ operation failed")
 
-# ================= AUTOROLE =================
-@bot.command()
-@commands.has_permissions(manage_roles=True)
-async def autorole(ctx, action: str, role: discord.Role):
-    if action.lower() == "add":
-        autoroles.add(role.id)
-        save_data()
-        await ctx.send(f"✅ Added {role.mention} to autoroles")
-    elif action.lower() == "remove":
-        autoroles.discard(role.id)
-        save_data()
-        await ctx.send(f"❌ Removed {role.mention} from autoroles")
+@sudo.command(name="stopmessage")
+@commands.has_permissions(kick_members=True)
+async def sudo_stopmessage(ctx, member: discord.Member):
+    task = message_tasks.get(member.id)
+
+    if not task:
+        await ctx.send("❌ no active process")
+        return
+
+    task.cancel()
+    message_tasks.pop(member.id, None)
+    await ctx.send(f"✅ stopped ({member})")
+
+# ================= ERROR HANDLER =================
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ access denied")
+    elif isinstance(error, commands.CommandNotFound):
+        return
     else:
-        await ctx.send("❌ Use: `?autorole add @role` or `?autorole remove @role`")
+        await ctx.send(f"❌ error: {error}")
+        raise error
 
 # ================= START =================
 if not TOKEN:
