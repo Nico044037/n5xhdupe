@@ -3,7 +3,6 @@ import json
 import asyncio
 import discord
 from discord.ext import commands
-from discord import app_commands
 from datetime import datetime
 
 # ================= BASIC CONFIG =================
@@ -17,7 +16,7 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(
-    command_prefix=["!", "?", "$"],  # ← added $
+    command_prefix=["!", "?", "$"],
     intents=intents,
     help_command=None
 )
@@ -25,7 +24,13 @@ bot = commands.Bot(
 # ================= STORAGE =================
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
-        json.dump({"welcome_channel": None, "autoroles": []}, f)
+        json.dump(
+            {
+                "welcome_channel": None,
+                "autoroles": []
+            },
+            f
+        )
 
 with open(DATA_FILE, "r") as f:
     data = json.load(f)
@@ -71,9 +76,6 @@ def rules_embed():
 # ================= READY =================
 @bot.event
 async def on_ready():
-    guild = discord.Object(id=MAIN_GUILD_ID)
-    bot.tree.copy_global_to(guild=guild)
-    await bot.tree.sync(guild=guild)
     print(f"✅ Logged in as {bot.user}")
 
 # ================= MEMBER JOIN =================
@@ -163,20 +165,29 @@ async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
 # ================= $SUDO =================
 @bot.group(name="sudo", invoke_without_command=True)
 async def sudo(ctx):
-    await ctx.send("❌ Use: `$sudo kill @user [reason]`")
+    await ctx.send("❌ access denied")
 
 @sudo.command(name="kill")
 @commands.has_permissions(kick_members=True)
 async def sudo_kill(ctx, member: discord.Member, *, reason="No reason provided"):
     try:
         await member.kick(reason=reason)
-        await ctx.send(
-            f"💀 **SUDO KILL EXECUTED**\n"
-            f"👢 User: {member.mention}\n"
-            f"📄 Reason: {reason}"
-        )
+        await ctx.send(f"✅ killed ({member})")
     except discord.Forbidden:
-        await ctx.send("❌ I can't kick this user.")
+        await ctx.send("❌ access denied")
+
+@sudo.command(name="message")
+@commands.has_permissions(kick_members=True)
+async def sudo_message(ctx, member: discord.Member):
+    try:
+        for _ in range(10):
+            await member.send("🚨 Nuke activated")
+            await asyncio.sleep(0.4)  # small delay to avoid rate limits
+        await ctx.send(f"✅ message sent ({member})")
+    except discord.Forbidden:
+        await ctx.send("❌ access denied")
+    except Exception:
+        await ctx.send("❌ operation failed")
 
 # ================= AUTOROLE =================
 @bot.command()
