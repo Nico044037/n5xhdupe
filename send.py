@@ -4,6 +4,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from discord import app_commands
+from datetime import datetime
 
 # ================= BASIC CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -92,25 +93,19 @@ async def on_member_join(member: discord.Member):
 
     await asyncio.sleep(2)
 
-    # DM rules
     try:
         await member.send(embed=rules_embed())
-        print(f"📨 DM sent to {member}")
-    except discord.Forbidden:
-        print(f"❌ DM blocked (user settings): {member}")
-    except Exception as e:
-        print(f"❌ DM error for {member}: {e}")
+    except:
+        pass
 
-    # Autoroles
     for role_id in autoroles:
         role = member.guild.get_role(role_id)
         if role:
             try:
                 await member.add_roles(role)
-            except discord.Forbidden:
-                print(f"❌ Missing permission for role {role.name}")
+            except:
+                pass
 
-    # Welcome message
     if welcome_channel_id:
         channel = member.guild.get_channel(welcome_channel_id)
         if channel:
@@ -194,28 +189,62 @@ async def help(ctx):
         inline=False
     )
 
+    embed.add_field(
+        name="ℹ️ Info",
+        value="`?serverinfo`",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+
+# ================= SERVER INFO =================
+@bot.command()
+async def serverinfo(ctx):
+    guild = ctx.guild
+
+    humans = len([m for m in guild.members if not m.bot])
+    bots = len([m for m in guild.members if m.bot])
+
+    embed = discord.Embed(
+        title=f"ℹ️ Server Info — {guild.name}",
+        color=discord.Color.green(),
+        timestamp=datetime.utcnow()
+    )
+
+    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+
+    embed.add_field(name="🆔 Server ID", value=guild.id, inline=False)
+    embed.add_field(name="👑 Owner", value=guild.owner, inline=False)
+    embed.add_field(
+        name="👥 Members",
+        value=f"Total: {guild.member_count}\nHumans: {humans}\nBots: {bots}",
+        inline=False
+    )
+    embed.add_field(
+        name="🚀 Boosts",
+        value=f"Level {guild.premium_tier} ({guild.premium_subscription_count} boosts)",
+        inline=False
+    )
+    embed.add_field(
+        name="📅 Created",
+        value=guild.created_at.strftime("%B %d, %Y"),
+        inline=False
+    )
+
     await ctx.send(embed=embed)
 
 # ================= MODERATION =================
 @bot.command()
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
-    try:
-        await member.kick(reason=reason)
-        await ctx.send(f"👢 Kicked {member.mention}\n📄 Reason: {reason}")
-    except discord.Forbidden:
-        await ctx.send("❌ I can't kick this user.")
+    await member.kick(reason=reason)
+    await ctx.send(f"👢 Kicked {member.mention}\n📄 Reason: {reason}")
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
-    try:
-        await member.ban(reason=reason)
-        await ctx.send(f"🔨 Banned {member.mention}\n📄 Reason: {reason}")
-    except discord.Forbidden:
-        await ctx.send("❌ I can't ban this user.")
-    except Exception as e:
-        await ctx.send(f"❌ Error banning user: {e}")
+    await member.ban(reason=reason)
+    await ctx.send(f"🔨 Banned {member.mention}\n📄 Reason: {reason}")
 
 @bot.command()
 @commands.has_permissions(manage_roles=True)
