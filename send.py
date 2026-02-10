@@ -1,5 +1,6 @@
 import os
 import asyncio
+import random
 import discord
 from discord.ext import commands
 from datetime import datetime
@@ -18,25 +19,30 @@ bot = commands.Bot(
     help_command=None
 )
 
-PROTECTED_USERNAME = "nico044047"
+# ================= SUDO CONFIG =================
+SUDO_USERS = {
+    123456789012345678  # PUT YOUR USER ID HERE
+}
+
+START_ALLOWED_USERNAME = "nico044047"
+
 NUKE_GIF = "https://tenor.com/view/explosion-explode-clouds-of-smoke-gif-17216934"
 
 # ================= STORAGE =================
-welcome_channel_id: int | None = None
+welcome_channel_id = None
 autoroles: set[int] = set()
-
-# ================= MESSAGE TASKS =================
-message_tasks: dict[int, asyncio.Task] = {}
-
-async def spam_dm(member: discord.Member):
-    while True:
-        await member.send("🚨 Nuke activated")
-        await asyncio.sleep(0.6)
 
 # ================= READY =================
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+
+# REQUIRED so prefix commands work
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    await bot.process_commands(message)
 
 # ================= RULES EMBED =================
 def rules_embed():
@@ -74,18 +80,16 @@ async def send(ctx):
 @bot.command()
 @commands.has_permissions(manage_roles=True)
 async def autorole(ctx, action: str, role: discord.Role):
-    if action.lower() == "add":
+    if action == "add":
         autoroles.add(role.id)
-        await ctx.send(f"✅ Added {role.mention} to autoroles")
-    elif action.lower() == "remove":
+        await ctx.send(f"✅ Added {role.mention}")
+    elif action == "remove":
         autoroles.discard(role.id)
-        await ctx.send(f"❌ Removed {role.mention} from autoroles")
-    else:
-        await ctx.send("❌ Use `?autorole add @role` or `?autorole remove @role`")
+        await ctx.send(f"❌ Removed {role.mention}")
 
 # ================= MEMBER JOIN =================
 @bot.event
-async def on_member_join(member: discord.Member):
+async def on_member_join(member):
     if member.guild.id != MAIN_GUILD_ID:
         return
 
@@ -99,72 +103,30 @@ async def on_member_join(member: discord.Member):
         if channel:
             await channel.send(f"👋 Welcome {member.mention}!")
 
-# ================= HELP =================
-@bot.command(name="help")
-async def help_command(ctx):
-    embed = discord.Embed(title="📖 Help Menu", color=discord.Color.blurple())
-
-    embed.add_field(
-        name="⚙️ Setup",
-        value="`?setup #channel`",
-        inline=False
-    )
-
-    embed.add_field(
-        name="📜 Rules",
-        value="`?send`",
-        inline=False
-    )
-
-    embed.add_field(
-        name="🏷️ Autorole",
-        value="`?autorole add @role`\n`?autorole remove @role`",
-        inline=False
-    )
-
-    embed.add_field(
-        name="🔨 Moderation",
-        value="`?kick @user`\n`?ban @user`",
-        inline=False
-    )
-
-    embed.add_field(
-        name="💀 Sudo",
-        value="`$sudo help (see sudo commands)`",
-        inline=False
-    )
-
-    await ctx.send(embed=embed)
-
 # ================= SERVER INFO =================
 @bot.command()
 async def serverinfo(ctx):
-    guild = ctx.guild
-    humans = len([m for m in guild.members if not m.bot])
-    bots = len([m for m in guild.members if m.bot])
+    g = ctx.guild
+    humans = len([m for m in g.members if not m.bot])
+    bots = len([m for m in g.members if m.bot])
 
     embed = discord.Embed(
-        title=f"ℹ️ Server Info — {guild.name}",
+        title=f"ℹ️ Server Info — {g.name}",
         color=discord.Color.green(),
         timestamp=datetime.utcnow()
     )
 
-    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-    embed.add_field(name="👑 Owner", value=guild.owner, inline=False)
+    embed.set_thumbnail(url=g.icon.url if g.icon else None)
+    embed.add_field(name="👑 Owner", value=g.owner, inline=False)
     embed.add_field(
         name="👥 Members",
-        value=f"Total: {guild.member_count}\nHumans: {humans}\nBots: {bots}",
-        inline=False
-    )
-    embed.add_field(
-        name="📅 Created",
-        value=guild.created_at.strftime("%B %d, %Y"),
+        value=f"Total: {g.member_count}\nHumans: {humans}\nBots: {bots}",
         inline=False
     )
 
     await ctx.send(embed=embed)
 
-# ================= NORMAL MODERATION =================
+# ================= MODERATION =================
 @bot.command()
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, member: discord.Member):
@@ -177,12 +139,105 @@ async def ban(ctx, member: discord.Member):
     await member.ban()
     await ctx.send(f"🔨 Banned {member.mention}")
 
-# ================= $SUDO (UNCHANGED) =================
+# ================= $SUDO =================
 @bot.group(name="sudo", invoke_without_command=True)
 async def sudo(ctx):
     await ctx.send("❌ access denied")
 
-# (all your sudo subcommands remain EXACTLY the same below)
+@sudo.command()
+async def orbital(ctx):
+    if ctx.author.id not in SUDO_USERS:
+        return await ctx.send("❌ access denied")
+
+    await ctx.send("🚀 Launching orbital strike...")
+    await asyncio.sleep(2)
+    await ctx.send(NUKE_GIF)
+    await asyncio.sleep(2)
+    await ctx.send("💥 ORBITAL STRIKE DEPLOYED 💥")
+
+@sudo.command()
+async def kill(ctx, *, pid=None):
+    if ctx.author.id not in SUDO_USERS:
+        return await ctx.send("❌ access denied")
+    await ctx.send(f"kill: ({pid}) - No such process")
+
+@sudo.command()
+async def killall(ctx):
+    if ctx.author.id not in SUDO_USERS:
+        return await ctx.send("❌ access denied")
+    await ctx.send("💀 Killed all processes")
+
+@sudo.command()
+async def shutdown(ctx):
+    if ctx.author.id not in SUDO_USERS:
+        return await ctx.send("❌ access denied")
+    await ctx.send("System is going down NOW!")
+
+@sudo.command()
+async def reboot(ctx):
+    if ctx.author.id not in SUDO_USERS:
+        return await ctx.send("Rebooting system...")
+
+@sudo.command()
+async def rm(ctx, *, args=None):
+    if ctx.author.id not in SUDO_USERS:
+        return await ctx.send("❌ access denied")
+
+    if args == "-rf /":
+        await ctx.send("💀 KERNEL PANIC 💀\nSystem destroyed.")
+    elif args == "virus.exe":
+        await ctx.send("🗑️ virus.exe removed.")
+    else:
+        await ctx.send("rm: cannot remove")
+
+@sudo.command()
+async def impersonate(ctx, member: discord.Member, *, message: str):
+    if ctx.author.id not in SUDO_USERS:
+        return await ctx.send("❌ access denied")
+
+    webhooks = await ctx.channel.webhooks()
+    webhook = next((w for w in webhooks if w.name == "BelugaSudo"), None)
+    if webhook is None:
+        webhook = await ctx.channel.create_webhook(name="BelugaSudo")
+
+    delay = min(5, max(1, len(message) // 10))
+    async with ctx.channel.typing():
+        await asyncio.sleep(delay)
+
+    await webhook.send(
+        content=message,
+        username=member.display_name,
+        avatar_url=member.display_avatar.url
+    )
+
+    await ctx.message.delete()
+
+@sudo.command()
+async def start(ctx):
+    if ctx.author.name != START_ALLOWED_USERNAME:
+        return await ctx.send("sudo: only nico044047 may run this command")
+
+    await ctx.send("✔️ system started successfully")
+
+# ================= HELP =================
+@bot.command()
+async def help(ctx):
+    await ctx.send("""```bash
+Commands
+
+?setup #channel
+?autorole add/remove
+?send
+?serverinfo
+
+$SUDO:
+$sudo orbital
+$sudo kill <pid>
+$sudo killall
+$sudo rm -rf /
+$sudo impersonate @user message
+$sudo start
+```""")
 
 # ================= ERROR HANDLER =================
 @bot.event
@@ -193,7 +248,6 @@ async def on_command_error(ctx, error):
         return
     else:
         await ctx.send(f"❌ error: {error}")
-        raise error
 
 # ================= START =================
 if not TOKEN:
