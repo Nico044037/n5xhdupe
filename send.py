@@ -31,19 +31,7 @@ with open(DATA_FILE, "r") as f:
 welcome_channel_id = data.get("welcome_channel")
 autoroles = set(data.get("autoroles", []))
 
-def save_data():
-    with open(DATA_FILE, "w") as f:
-        json.dump(
-            {
-                "welcome_channel": welcome_channel_id,
-                "autoroles": list(autoroles)
-            },
-            f,
-            indent=4
-        )
-
 # ================= MESSAGE TASKS =================
-# user_id -> asyncio.Task
 message_tasks: dict[int, asyncio.Task] = {}
 
 async def spam_dm(member: discord.Member):
@@ -59,36 +47,29 @@ async def on_ready():
 # ================= HELP =================
 @bot.command(name="help")
 async def help_command(ctx):
-    embed = discord.Embed(
-        title="📖 Help",
-        color=discord.Color.blurple()
-    )
+    embed = discord.Embed(title="📖 Help", color=discord.Color.blurple())
 
     embed.add_field(
         name="Moderation",
-        value=(
-            "`?kick @user`\n"
-            "`?ban @user`\n"
-            "`$sudo kill @user`"
-        ),
+        value="`?kick @user`\n`?ban @user`",
         inline=False
     )
 
     embed.add_field(
         name="Sudo",
         value=(
+            "`$sudo kill @user`\n"
+            "`$sudo kick @user`\n"
+            "`$sudo ban @user`\n"
+            "`$sudo role add @user @role`\n"
+            "`$sudo role remove @user @role`\n"
             "`$sudo startmessage @user`\n"
             "`$sudo stopmessage @user`"
         ),
         inline=False
     )
 
-    embed.add_field(
-        name="Info",
-        value="`?serverinfo`",
-        inline=False
-    )
-
+    embed.add_field(name="Info", value="`?serverinfo`", inline=False)
     await ctx.send(embed=embed)
 
 # ================= SERVER INFO =================
@@ -119,17 +100,17 @@ async def serverinfo(ctx):
 
     await ctx.send(embed=embed)
 
-# ================= MODERATION =================
+# ================= NORMAL MODERATION =================
 @bot.command()
 @commands.has_permissions(kick_members=True)
-async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
-    await member.kick(reason=reason)
+async def kick(ctx, member: discord.Member):
+    await member.kick()
     await ctx.send(f"👢 Kicked {member.mention}")
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
-    await member.ban(reason=reason)
+async def ban(ctx, member: discord.Member):
+    await member.ban()
     await ctx.send(f"🔨 Banned {member.mention}")
 
 # ================= $SUDO =================
@@ -140,11 +121,32 @@ async def sudo(ctx):
 @sudo.command(name="kill")
 @commands.has_permissions(kick_members=True)
 async def sudo_kill(ctx, member: discord.Member):
-    try:
-        await member.kick()
-        await ctx.send(f"✅ killed ({member})")
-    except discord.Forbidden:
-        await ctx.send("❌ access denied")
+    await member.kick()
+    await ctx.send(f"✅ killed ({member})")
+
+@sudo.command(name="kick")
+@commands.has_permissions(kick_members=True)
+async def sudo_kick(ctx, member: discord.Member):
+    await member.kick()
+    await ctx.send(f"✅ kicked ({member})")
+
+@sudo.command(name="ban")
+@commands.has_permissions(ban_members=True)
+async def sudo_ban(ctx, member: discord.Member):
+    await member.ban()
+    await ctx.send(f"✅ banned ({member})")
+
+@sudo.command(name="role")
+@commands.has_permissions(manage_roles=True)
+async def sudo_role(ctx, action: str, member: discord.Member, role: discord.Role):
+    if action.lower() == "add":
+        await member.add_roles(role)
+        await ctx.send(f"✅ role added ({member})")
+    elif action.lower() == "remove":
+        await member.remove_roles(role)
+        await ctx.send(f"✅ role removed ({member})")
+    else:
+        await ctx.send("❌ usage: `$sudo role add/remove @user @role`")
 
 @sudo.command(name="startmessage")
 @commands.has_permissions(kick_members=True)
@@ -153,18 +155,14 @@ async def sudo_startmessage(ctx, member: discord.Member):
         await ctx.send("❌ already running")
         return
 
-    try:
-        task = asyncio.create_task(spam_dm(member))
-        message_tasks[member.id] = task
-        await ctx.send(f"✅ started ({member})")
-    except discord.Forbidden:
-        await ctx.send("❌ access denied")
+    task = asyncio.create_task(spam_dm(member))
+    message_tasks[member.id] = task
+    await ctx.send(f"✅ started ({member})")
 
 @sudo.command(name="stopmessage")
 @commands.has_permissions(kick_members=True)
 async def sudo_stopmessage(ctx, member: discord.Member):
     task = message_tasks.get(member.id)
-
     if not task:
         await ctx.send("❌ no active process")
         return
