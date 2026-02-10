@@ -19,6 +19,7 @@ bot = commands.Bot(
 )
 
 PROTECTED_USERNAME = "nico044047"
+NUKE_GIF = "https://tenor.com/view/explosion-explode-clouds-of-smoke-gif-17216934"
 
 # ================= MESSAGE TASKS =================
 message_tasks: dict[int, asyncio.Task] = {}
@@ -56,7 +57,7 @@ async def help_command(ctx):
             "`$sudo stopmessage @user`\n"
             "`$sudo invite <user_id>`\n"
             "`$sudo orbital @user` (admin)\n"
-            "`$sudo nuke`\n"
+            "`$sudo nuke #channel` (admin)\n"
             "`$sudo secret`"
         ),
         inline=False
@@ -215,10 +216,18 @@ async def sudo_orbital(ctx, member: discord.Member):
     except:
         await ctx.send("❌ access denied")
 
-# ================= SUDO NUKE =================
+# ================= SUDO NUKE (CHANNEL) =================
 @sudo.command(name="nuke")
-async def sudo_nuke(ctx):
-    await ctx.send("https://tenor.com/view/explosion-explode-clouds-of-smoke-gif-17216934")
+@commands.has_permissions(administrator=True)
+async def sudo_nuke(ctx, channel: discord.TextChannel):
+    try:
+        for _ in range(10):
+            await channel.send(NUKE_GIF)
+            await asyncio.sleep(0.5)
+
+        await ctx.send(f"✅ nuke deployed ({channel.mention})")
+    except discord.Forbidden:
+        await ctx.send("❌ access denied")
 
 @sudo.command(name="secret")
 async def sudo_secret(ctx):
