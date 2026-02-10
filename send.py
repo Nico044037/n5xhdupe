@@ -9,7 +9,7 @@ from discord import app_commands
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Change here OR set GUILD_ID in Railway
-MAIN_GUILD_ID = int(os.getenv("GUILD_ID", "1452967364470505565"))
+MAIN_GUILD_ID = int(os.getenv("GUILD", "1452967364470505565"))
 
 DATA_FILE = "data.json"
 
