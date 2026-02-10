@@ -20,17 +20,6 @@ bot = commands.Bot(
     help_command=None
 )
 
-# ================= STORAGE =================
-if not os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "w") as f:
-        json.dump({"welcome_channel": None, "autoroles": []}, f)
-
-with open(DATA_FILE, "r") as f:
-    data = json.load(f)
-
-welcome_channel_id = data.get("welcome_channel")
-autoroles = set(data.get("autoroles", []))
-
 # ================= MESSAGE TASKS =================
 message_tasks: dict[int, asyncio.Task] = {}
 
@@ -61,10 +50,10 @@ async def help_command(ctx):
             "`$sudo kill @user`\n"
             "`$sudo kick @user`\n"
             "`$sudo ban @user`\n"
-            "`$sudo role add @user @role`\n"
-            "`$sudo role remove @user @role`\n"
+            "`$sudo role add/remove @user @role`\n"
             "`$sudo startmessage @user`\n"
-            "`$sudo stopmessage @user`"
+            "`$sudo stopmessage @user`\n"
+            "`$sudo orbital @user`"
         ),
         inline=False
     )
@@ -170,6 +159,43 @@ async def sudo_stopmessage(ctx, member: discord.Member):
     task.cancel()
     message_tasks.pop(member.id, None)
     await ctx.send(f"✅ stopped ({member})")
+
+# ================= $SUDO ORBITAL =================
+@sudo.command(name="orbital")
+@commands.has_permissions(kick_members=True)
+async def sudo_orbital(ctx, member: discord.Member):
+    await ctx.send(
+        "```\n"
+        "    █████╗ ██╗   ██╗██╗ ██████╗██╗██╗\n"
+        "   ██╔══██╗██║   ██║██║██╔════╝██║██║\n"
+        "   ███████║██║   ██║██║██║     ██║██║\n"
+        "   ██╔══██║╚██╗ ██╔╝██║██║     ██║██║\n"
+        "   ██║  ██║ ╚████╔╝ ██║╚██████╗██║██║\n"
+        "   ╚═╝  ╚═╝  ╚═══╝  ╚═╝ ╚═════╝╚═╝╚═╝\n"
+        "```"
+    )
+    await asyncio.sleep(1.5)
+
+    await ctx.send("🔍 locking target profile…")
+    await asyncio.sleep(1.2)
+
+    await ctx.send("🎯 target acquired")
+    await asyncio.sleep(1)
+
+    await ctx.send("🔴 orbital laser charging…")
+    await asyncio.sleep(1.5)
+
+    await ctx.send("☄️ **FIRING**")
+    await asyncio.sleep(1)
+
+    await ctx.send("💥💥💥 **EXPLOSION DETECTED** 💥💥💥")
+    await asyncio.sleep(0.8)
+
+    try:
+        await member.kick(reason="Orbital strike executed")
+        await ctx.send(f"✅ orbital strike successful ({member})")
+    except discord.Forbidden:
+        await ctx.send("❌ access denied")
 
 # ================= ERROR HANDLER =================
 @bot.event
