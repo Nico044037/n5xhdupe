@@ -222,6 +222,7 @@ async def sudo_orbital(ctx, member: discord.Member):
 async def sudo_nuke(ctx, channel: discord.TextChannel):
     try:
         for _ in range(50):
+            await channel.send(NUKE_GIF)
 
         await ctx.send(f"✅ nuke deployed ({channel.mention})")
     except discord.Forbidden:
