@@ -1,6 +1,7 @@
 import os
 import discord
 import aiohttp
+import re
 from discord.ext import commands
 from datetime import datetime
 import asyncio
@@ -112,10 +113,8 @@ async def help_command(ctx):
     embed.add_field(name="🔨 Moderation",
                     value="`?kick @user`\n`?ban @user`",
                     inline=False)
-    embed.add_field(name="💀 Sudo",
-                    value="`$sudo kill`\n`$sudo orbital`\n`$sudo eliminate`\n"
-                          "`$sudo impersonate`\n`$sudo invite`\n"
-                          "`$sudo info <mc_user>`",
+    embed.add_field(name="🎮 Minecraft",
+                    value="`$sudo info <username>`",
                     inline=False)
 
     await ctx.send(embed=embed)
@@ -133,74 +132,100 @@ async def ban(ctx, member: discord.Member):
     await member.ban()
     await ctx.send(f"🔨 Banned {member.mention}")
 
+# ================= ROLE TOGGLE =================
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def role(ctx, member: discord.Member, role: discord.Role):
+    if ctx.guild.id != MAIN_GUILD_ID:
+        return
+
+    if role >= ctx.guild.me.top_role:
+        return await ctx.send("❌ I cannot manage that role.")
+
+    embed = discord.Embed(color=discord.Color.blurple())
+    embed.set_footer(text=f"Moderator: {ctx.author}", icon_url=ctx.author.display_avatar.url)
+    embed.timestamp = datetime.utcnow()
+
+    try:
+        if role in member.roles:
+            await member.remove_roles(role)
+            embed.title = "Role Removed"
+            embed.color = discord.Color.red()
+        else:
+            await member.add_roles(role)
+            embed.title = "Role Added"
+            embed.color = discord.Color.green()
+
+        embed.description = f"**Member:** {member.mention}\n**Role:** {role.mention}"
+        await ctx.send(embed=embed)
+
+    except discord.Forbidden:
+        await ctx.send("❌ I don’t have permission to manage that role.")
+
 # ================= SUDO GROUP =================
 @bot.group(name="sudo", invoke_without_command=True)
 async def sudo(ctx):
     await ctx.send("❌ Usage: `$sudo <command>`")
 
+# ================= SUDO INFO (NameMC Scraper) =================
 @sudo.command(name="info")
 @commands.has_permissions(administrator=True)
 async def sudo_info(ctx, mc_username: str):
 
+    url = f"https://namemc.com/profile/{mc_username}"
+
     async with aiohttp.ClientSession() as session:
-
-        # ================= GET UUID =================
-        async with session.get(
-            f"https://api.mojang.com/users/profiles/minecraft/{mc_username}"
-        ) as response:
-
+        async with session.get(url) as response:
             if response.status != 200:
-                return await ctx.send(f"❌ No Minecraft account found for `{mc_username}`.")
+                return await ctx.send("❌ Could not fetch NameMC profile.")
 
-            try:
-                data = await response.json()
-            except:
-                return await ctx.send("❌ Mojang API error (invalid response).")
+            html = await response.text()
 
-            if not isinstance(data, dict) or "id" not in data:
-                return await ctx.send("❌ Invalid Mojang response.")
+    uuid_match = re.search(
+        r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+        html
+    )
 
-            uuid_raw = data["id"]
+    if not uuid_match:
+        return await ctx.send("❌ Could not find UUID on NameMC.")
 
-            formatted_uuid = (
-                f"{uuid_raw[:8]}-"
-                f"{uuid_raw[8:12]}-"
-                f"{uuid_raw[12:16]}-"
-                f"{uuid_raw[16:20]}-"
-                f"{uuid_raw[20:]}"
-            )
+    uuid = uuid_match.group(1)
 
-        # ================= GET NAME HISTORY =================
-        async with session.get(
-            f"https://api.mojang.com/user/profiles/{uuid_raw}/names"
-        ) as history_response:
+    names = re.findall(r'/search\?q=([A-Za-z0-9_]+)"', html)
+    name_history = "\n".join(dict.fromkeys(names))
 
-            if history_response.status != 200:
-                name_history = "Could not fetch name history."
-            else:
-                try:
-                    history_data = await history_response.json()
-                    name_history = "\n".join(
-                        [entry.get("name", "Unknown") for entry in history_data]
-                    )
-                except:
-                    name_history = "Error reading name history."
+    first_seen_match = re.search(
+        r"First seen.*?(\d{4}-\d{2}-\d{2})",
+        html
+    )
 
-        # ================= EMBED =================
-        embed = discord.Embed(
-            title="🎮 Minecraft Account Info",
-            color=discord.Color.green()
-        )
+    first_seen = first_seen_match.group(1) if first_seen_match else "Unknown"
 
-        embed.add_field(name="Username", value=mc_username, inline=False)
-        embed.add_field(name="UUID", value=formatted_uuid, inline=False)
-        embed.add_field(
-            name="Name History",
-            value=name_history if name_history else "No previous names",
-            inline=False
-        )
+    head_render = f"https://mc-heads.net/head/{uuid}"
+    body_render = f"https://mc-heads.net/body/{uuid}"
 
-        await ctx.send(embed=embed)
+    embed = discord.Embed(
+        title="🎮 Minecraft Account (NameMC)",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(name="Username", value=mc_username, inline=False)
+    embed.add_field(name="UUID", value=uuid, inline=False)
+    embed.add_field(name="First Seen", value=first_seen, inline=False)
+    embed.add_field(
+        name="Name History",
+        value=name_history if name_history else "No history found",
+        inline=False
+    )
+
+    embed.set_thumbnail(url=head_render)
+    embed.set_image(url=body_render)
+
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="Open NameMC", url=url))
+
+    await ctx.send(embed=embed, view=view)
+
 # ================= ERROR HANDLER =================
 @bot.event
 async def on_command_error(ctx, error):
