@@ -222,7 +222,12 @@ async def sudo_invite(ctx, user_id: int):
         await ctx.send("❌ Cannot DM that user.")
     except Exception:
         await ctx.send("❌ Failed to create or send invite.")
-
+# ================= SUDO ILLEGAL =================
+@sudo.command(name="illegal")
+@commands.has_permissions(administrator=True)
+@sudo_cooldown()
+async def sudo_illegal(ctx):
+    await ctx.send("https://th.bing.com/th/id/OIP.PSbNczLopyibnpKatAsDOAHaHg?w=178&h=180&c=7&r=0&o=7&dpr=1.1&pid=1.7&rm=3")
 # ================= ERROR HANDLER =================
 @bot.event
 async def on_command_error(ctx, error):
