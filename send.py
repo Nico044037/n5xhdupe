@@ -224,19 +224,32 @@ async def sudo_invite(ctx, user_id: int):
         await ctx.send("❌ Failed to create or send invite.")
 # ================= SUDO ILLEGAL =================
 @sudo.command(name="illegal")
-@commands.is_nsfw()
+@commands.guild_only()
 async def sudo_illegal(ctx):
+    if not ctx.channel.is_nsfw():
+        return await ctx.send("🔞 This command only works in age-restricted channels.")
+    
     await ctx.send("https://th.bing.com/th/id/OIP.PSbNczLopyibnpKatAsDOAHaHg?w=178&h=180&c=7&r=0&o=7&dpr=1.1&pid=1.7&rm=3")
-# ================= SUDO blowjob =================
+
+
+# ================= SUDO BLOWJOB =================
 @sudo.command(name="blowjob")
-@commands.is_nsfw()
+@commands.guild_only()
 async def sudo_blowjob(ctx):
-    await ctx.send("https://cdn.discordapp.com/attachments/834490895260844032/834491260789063700/blowjob.gif?ex=698d6ecc&is=698c1d4c&hm=b2700114b1a42c4dd8c18f49e3088d79787c224a99566f9f5e0a23c5a9060aea&")
-# ================= SUDO fuck =================
+    if not ctx.channel.is_nsfw():
+        return await ctx.send("🔞 This command only works in age-restricted channels.")
+    
+    await ctx.send("https://cdn.discordapp.com/attachments/834490895260844032/834491260789063700/blowjob.gif")
+
+
+# ================= SUDO FUCK =================
 @sudo.command(name="fuck")
-@commands.is_nsfw()
+@commands.guild_only()
 async def sudo_fuck(ctx):
-    await ctx.send("https://cdn.discordapp.com/attachments/1300252269630984355/1426808660142850098/0B9706EC-9BA6-45C4-8F99-844080C6FB0C.gif?ex=698d699d&is=698c181d&hm=7499e1a1e44e6049525710e50170b4b64e3457edeed2cc3fcb77790292e98ae5&")
+    if not ctx.channel.is_nsfw():
+        return await ctx.send("🔞 This command only works in age-restricted channels.")
+    
+    await ctx.send("https://cdn.discordapp.com/attachments/1300252269630984355/1426808660142850098/0B9706EC-9BA6-45C4-8F99-844080C6FB0C.gif")
 # ================= ERROR HANDLER =================
 @bot.event
 async def on_command_error(ctx, error):
