@@ -250,6 +250,14 @@ async def sudo_fuck(ctx):
         return await ctx.send("🔞 This command only works in age-restricted channels.")
     
     await ctx.send("https://cdn.discordapp.com/attachments/1300252269630984355/1426808660142850098/0B9706EC-9BA6-45C4-8F99-844080C6FB0C.gif")
+# ================= SUDO Furry =================
+@sudo.command(name="fuck")
+@commands.guild_only()
+async def sudo_fuck(ctx):
+    if not ctx.channel.is_nsfw():
+        return await ctx.send("🔞 This command only works in age-restricted channels.")
+    
+    await ctx.send("https://cdn.discordapp.com/attachments/1470850658860011718/1471187210341449789/image.png?ex=698e055c&is=698cb3dc&hm=3fa4c593a239e98c09b19570c5d761541730d22138d1767b29799b2f4f19bfda&")
 # ================= ERROR HANDLER =================
 @bot.event
 async def on_command_error(ctx, error):
