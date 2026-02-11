@@ -226,6 +226,10 @@ async def sudo_invite(ctx, user_id: int):
 @sudo.command(name="illegal")
 async def sudo_illegal(ctx):
     await ctx.send("https://th.bing.com/th/id/OIP.PSbNczLopyibnpKatAsDOAHaHg?w=178&h=180&c=7&r=0&o=7&dpr=1.1&pid=1.7&rm=3")
+# ================= SUDO blowjob =================
+@sudo.command(name="blowjob")
+async def sudo_blowjob(ctx):
+    await ctx.send("https://cdn.discordapp.com/attachments/834490895260844032/834491260789063700/blowjob.gif?ex=698d6ecc&is=698c1d4c&hm=b2700114b1a42c4dd8c18f49e3088d79787c224a99566f9f5e0a23c5a9060aea&")
 # ================= ERROR HANDLER =================
 @bot.event
 async def on_command_error(ctx, error):
