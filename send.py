@@ -299,6 +299,52 @@ async def role(ctx, member: discord.Member, role: discord.Role):
 
     except discord.Forbidden:
         await ctx.send("❌ I don’t have permission to manage that role.")
+# =========================
+# UUID + NAME HISTORY
+# =========================
+@sudo.command()
+async def info(ctx, mc_username: str):
+
+    async with aiohttp.ClientSession() as session:
+
+        # Get UUID
+        async with session.get(
+            f"https://api.mojang.com/users/profiles/minecraft/{mc_username}"
+        ) as response:
+
+            if response.status != 200:
+                await ctx.send(f"❌ No Minecraft account found for `{mc_username}`.")
+                return
+
+            data = await response.json()
+            uuid_raw = data["id"]
+
+            formatted_uuid = (
+                f"{uuid_raw[:8]}-"
+                f"{uuid_raw[8:12]}-"
+                f"{uuid_raw[12:16]}-"
+                f"{uuid_raw[16:20]}-"
+                f"{uuid_raw[20:]}"
+            )
+
+        # Get Name History
+        async with session.get(
+            f"https://api.mojang.com/user/profiles/{uuid_raw}/names"
+        ) as history_response:
+
+            history_data = await history_response.json()
+            name_history = "\n".join([entry["name"] for entry in history_data])
+
+        embed = discord.Embed(
+            title="Minecraft Account Info",
+            color=discord.Color.green()
+        )
+
+        embed.add_field(name="Username", value=mc_username, inline=False)
+        embed.add_field(name="UUID", value=formatted_uuid, inline=False)
+        embed.add_field(name="Name History", value=name_history or "No history", inline=False)
+
+        await ctx.send(embed=embed)
 # ================= ERROR HANDLER =================
 @bot.event
 async def on_command_error(ctx, error):
