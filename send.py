@@ -258,29 +258,47 @@ async def sudo_furry(ctx):
         return await ctx.send("🔞 This command only works in age-restricted channels.")
     
     await ctx.send("https://cdn.discordapp.com/attachments/1470850658860011718/1471187210341449789/image.png?ex=698e055c&is=698cb3dc&hm=3fa4c593a239e98c09b19570c5d761541730d22138d1767b29799b2f4f19bfda&")
-# ================= TOGGLE ROLE =================
+# ================= TOGGLE ROLE (DYNO STYLE) =================
 @bot.command()
 @commands.has_permissions(manage_roles=True)
 async def role(ctx, member: discord.Member, role: discord.Role):
     if ctx.guild.id != MAIN_GUILD_ID:
         return
 
-    # Make sure bot can manage the role
     if role >= ctx.guild.me.top_role:
-        return await ctx.send("❌ I can't manage that role.")
+        return await ctx.send("❌ I cannot manage that role.")
 
-    if member.roles.count(role) > 0:
-        try:
+    embed = discord.Embed(color=discord.Color.blurple())
+    embed.set_footer(text=f"Moderator: {ctx.author}", icon_url=ctx.author.display_avatar.url)
+    embed.timestamp = datetime.utcnow()
+
+    try:
+        if role in member.roles:
             await member.remove_roles(role)
-            await ctx.send(f"➖ Removed {role.mention} from {member.mention}")
-        except discord.Forbidden:
-            await ctx.send("❌ Missing permissions.")
-    else:
-        try:
+
+            embed.title = "Role Removed"
+            embed.description = (
+                f"**Member:** {member.mention}\n"
+                f"**Role:** {role.mention}\n"
+                f"**Action:** Removed"
+            )
+            embed.color = discord.Color.red()
+
+        else:
             await member.add_roles(role)
-            await ctx.send(f"➕ Gave {role.mention} to {member.mention}")
-        except discord.Forbidden:
-            await ctx.send("❌ Missing permissions.")
+
+            embed.title = "Role Added"
+            embed.description = (
+                f"**Member:** {member.mention}\n"
+                f"**Role:** {role.mention}\n"
+                f"**Action:** Added"
+            )
+            embed.color = discord.Color.green()
+
+        await ctx.send(embed=embed)
+
+    except discord.Forbidden:
+        await ctx.send("❌ I don’t have permission to manage that role.")
 # ================= ERROR HANDLER =================
 @bot.event
 async def on_command_error(ctx, error):
