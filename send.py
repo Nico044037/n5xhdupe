@@ -217,9 +217,18 @@ async def role_toggle(ctx, member: discord.Member, role: discord.Role):
 @commands.has_permissions(administrator=True)
 async def setupall(ctx):
     guild = ctx.guild
-    await ctx.send(embed=info("Setup Starting","Building full server system..."))
+
+    await ctx.send("Starting setup...")
+
+    # 🔥 Force create row FIRST
+    await db.execute(
+        "INSERT INTO guild_settings (guild_id) VALUES ($1) "
+        "ON CONFLICT (guild_id) DO NOTHING",
+        guild.id
+    )
 
     verified_role = await guild.create_role(name="Verified")
+
     info_cat = await guild.create_category("📌 Information")
     mod_cat = await guild.create_category("🛡 Moderation")
     ticket_cat = await guild.create_category("🎫 Tickets")
@@ -230,17 +239,12 @@ async def setupall(ctx):
     logs_ch = await guild.create_text_channel("logs", category=mod_cat)
     ticket_panel = await guild.create_text_channel("ticket-panel", category=ticket_cat)
 
-    await update_setting(guild.id,"welcome_channel",welcome_ch.id)
-    await update_setting(guild.id,"logs_channel",logs_ch.id)
-    await update_setting(guild.id,"rules_channel",rules_ch.id)
-    await update_setting(guild.id,"verify_channel",verify_ch.id)
-    await update_setting(guild.id,"verified_role",verified_role.id)
-    await update_setting(guild.id,"ticket_category",ticket_cat.id)
+    await update_setting(guild.id, "welcome_channel", welcome_ch.id)
+    await update_setting(guild.id, "logs_channel", logs_ch.id)
+    await update_setting(guild.id, "rules_channel", rules_ch.id)
+    await update_setting(guild.id, "verify_channel", verify_ch.id)
+    await update_setting(guild.id, "verified_role", verified_role.id)
+    await update_setting(guild.id, "ticket_category", ticket_cat.id)
 
-    await rules_ch.send(embed=rules_embed())
-    await verify_ch.send(embed=info("Verification Required","Click below."), view=VerifyView())
-    await ticket_panel.send(embed=info("Support Tickets","Click below."), view=TicketView())
-
-    await ctx.send(embed=success("Setup Complete","Server fully configured."))
-
+    await ctx.send("Setup finished.")
 bot.run(TOKEN)
