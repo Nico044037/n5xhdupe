@@ -1,10 +1,8 @@
 import os
-import asyncio
 import asyncpg
-import aiohttp
 import discord
 from discord.ext import commands
-from discord.ui import View, Modal, TextInput, Button
+from discord.ui import View, Modal, TextInput
 from datetime import datetime
 import io
 
@@ -12,7 +10,10 @@ import io
 TOKEN = os.getenv("DISCORD_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-intents = discord.Intents.all()
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
 bot = commands.Bot(command_prefix=["!", "?", "$"], intents=intents, help_command=None)
 
 db = None
@@ -63,28 +64,31 @@ async def get_settings(guild_id):
         row = await db.fetchrow("SELECT * FROM guild_settings WHERE guild_id=$1", guild_id)
     return row
 
+# 🔥 FIXED VERSION
 async def update_setting(guild_id, column, value):
-    await db.execute(f"UPDATE guild_settings SET {column}=$1 WHERE guild_id=$2", value, guild_id)
+    await db.execute(
+        "INSERT INTO guild_settings (guild_id) VALUES ($1) "
+        "ON CONFLICT (guild_id) DO NOTHING",
+        guild_id
+    )
+    await db.execute(
+        f"UPDATE guild_settings SET {column}=$1 WHERE guild_id=$2",
+        value, guild_id
+    )
 
 # ================= LOG SYSTEM =================
 async def log(guild, embed, file=None):
-    try:
-        settings = await get_settings(guild.id)
-        channel_id = settings["logs_channel"]
-        if not channel_id:
-            return
-        channel = guild.get_channel(channel_id)
-        if channel:
-            await channel.send(embed=embed, file=file)
-    except Exception as e:
-        print("LOG ERROR:", e)
+    settings = await get_settings(guild.id)
+    channel_id = settings["logs_channel"]
+    if not channel_id:
+        return
+    channel = guild.get_channel(channel_id)
+    if channel:
+        await channel.send(embed=embed, file=file)
 
 # ================= AUTOROLE =================
 async def add_autorole(guild_id, role_id):
     await db.execute("INSERT INTO autoroles (guild_id, role_id) VALUES ($1,$2)", guild_id, role_id)
-
-async def remove_autorole(guild_id, role_id):
-    await db.execute("DELETE FROM autoroles WHERE guild_id=$1 AND role_id=$2", guild_id, role_id)
 
 async def get_autoroles(guild_id):
     rows = await db.fetch("SELECT role_id FROM autoroles WHERE guild_id=$1", guild_id)
@@ -102,15 +106,6 @@ def rules_embed():
     return e
 
 # ================= VERIFY =================
-async def try_send_verify_panel(guild):
-    settings = await get_settings(guild.id)
-    if settings["verify_channel"] and settings["verified_role"]:
-        ch = guild.get_channel(settings["verify_channel"])
-        if ch:
-            await ch.send(embed=info("Verification Required",
-                                     "Click below to verify."),
-                          view=VerifyView())
-
 class VerifyView(View):
     def __init__(self): super().__init__(timeout=None)
 
@@ -178,6 +173,45 @@ class TicketView(View):
         await channel.send(embed=info("Ticket Opened","Describe your issue."), view=CloseView())
         await interaction.response.send_message(embed=success("Created",channel.mention),ephemeral=True)
 
+# ================= EVENTS =================
+@bot.event
+async def on_member_join(member):
+    try:
+        await member.send(embed=rules_embed())
+    except:
+        pass
+
+    settings = await get_settings(member.guild.id)
+
+    if settings["welcome_channel"]:
+        ch = member.guild.get_channel(settings["welcome_channel"])
+        if ch:
+            await ch.send(embed=success("New Member Joined", member.mention))
+
+    # Autoroles
+    autorole_ids = await get_autoroles(member.guild.id)
+    roles = [member.guild.get_role(r) for r in autorole_ids if member.guild.get_role(r)]
+    if roles:
+        await member.add_roles(*roles)
+
+    await log(member.guild, log_embed("Member Joined", member.mention))
+
+# ================= DYNO STYLE ROLE =================
+@bot.command(name="role")
+@commands.has_permissions(manage_roles=True)
+async def role_toggle(ctx, member: discord.Member, role: discord.Role):
+    if role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error","Role higher than bot."))
+
+    if role in member.roles:
+        await member.remove_roles(role)
+        await ctx.send(embed=success("Role Removed", f"{role.mention} removed from {member.mention}"))
+    else:
+        await member.add_roles(role)
+        await ctx.send(embed=success("Role Added", f"{role.mention} added to {member.mention}"))
+
+    await log(ctx.guild, log_embed("Role Toggled", f"{member.mention} → {role.mention}"))
+
 # ================= SETUPALL =================
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -186,9 +220,6 @@ async def setupall(ctx):
     await ctx.send(embed=info("Setup Starting","Building full server system..."))
 
     verified_role = await guild.create_role(name="Verified")
-    unverified_role = await guild.create_role(name="Unverified")
-    support_role = await guild.create_role(name="Support")
-
     info_cat = await guild.create_category("📌 Information")
     mod_cat = await guild.create_category("🛡 Moderation")
     ticket_cat = await guild.create_category("🎫 Tickets")
@@ -199,75 +230,17 @@ async def setupall(ctx):
     logs_ch = await guild.create_text_channel("logs", category=mod_cat)
     ticket_panel = await guild.create_text_channel("ticket-panel", category=ticket_cat)
 
-    await verify_ch.set_permissions(guild.default_role, send_messages=False)
-    await rules_ch.set_permissions(guild.default_role, send_messages=False)
-
     await update_setting(guild.id,"welcome_channel",welcome_ch.id)
     await update_setting(guild.id,"logs_channel",logs_ch.id)
     await update_setting(guild.id,"rules_channel",rules_ch.id)
     await update_setting(guild.id,"verify_channel",verify_ch.id)
     await update_setting(guild.id,"verified_role",verified_role.id)
     await update_setting(guild.id,"ticket_category",ticket_cat.id)
-    await update_setting(guild.id,"antinuke",True)
 
     await rules_ch.send(embed=rules_embed())
     await verify_ch.send(embed=info("Verification Required","Click below."), view=VerifyView())
     await ticket_panel.send(embed=info("Support Tickets","Click below."), view=TicketView())
 
     await ctx.send(embed=success("Setup Complete","Server fully configured."))
-# ================= ROLE TOGGLE (DYNO STYLE) =================
-@bot.command(name="role")
-@commands.has_permissions(manage_roles=True)
-async def role_toggle(ctx, member: discord.Member, role: discord.Role):
 
-    # Bot hierarchy check
-    if role >= ctx.guild.me.top_role:
-        return await ctx.send(embed=error(
-            "Hierarchy Error",
-            "That role is higher than my highest role."
-        ))
-
-    # Moderator hierarchy check
-    if role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
-        return await ctx.send(embed=error(
-            "Hierarchy Error",
-            "You cannot manage a role equal or higher than your highest role."
-        ))
-
-    embed = discord.Embed(timestamp=datetime.utcnow())
-    embed.set_footer(
-        text=f"Moderator: {ctx.author}",
-        icon_url=ctx.author.display_avatar.url
-    )
-
-    try:
-        if role in member.roles:
-            await member.remove_roles(role, reason=f"Role toggled by {ctx.author}")
-            embed.title = "Role Removed"
-            embed.description = f"{role.mention} removed from {member.mention}"
-            embed.color = discord.Color.red()
-        else:
-            await member.add_roles(role, reason=f"Role toggled by {ctx.author}")
-            embed.title = "Role Added"
-            embed.description = f"{role.mention} added to {member.mention}"
-            embed.color = discord.Color.green()
-
-        await ctx.send(embed=embed)
-
-        # Log it
-        await log(
-            ctx.guild,
-            log_embed(
-                "Role Toggled",
-                f"User: {member.mention}\n"
-                f"Role: {role.mention}\n"
-                f"Moderator: {ctx.author.mention}"
-            )
-        )
-
-    except discord.Forbidden:
-        await ctx.send(embed=error(
-            "Permission Error",
-            "I do not have permission to manage this role."
-        ))
 bot.run(TOKEN)
