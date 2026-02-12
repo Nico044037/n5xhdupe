@@ -39,8 +39,7 @@ async def on_ready():
         verified_role BIGINT,
         logs_channel BIGINT,
         rules_channel BIGINT,
-        ticket_category BIGINT,
-        antinuke BOOLEAN DEFAULT FALSE
+        ticket_category BIGINT
     );
     """)
 
@@ -57,20 +56,19 @@ async def on_ready():
 
     print("Bot ready.")
 
-async def get_settings(guild_id):
-    row = await db.fetchrow("SELECT * FROM guild_settings WHERE guild_id=$1", guild_id)
-    if not row:
-        await db.execute("INSERT INTO guild_settings (guild_id) VALUES ($1)", guild_id)
-        row = await db.fetchrow("SELECT * FROM guild_settings WHERE guild_id=$1", guild_id)
-    return row
-
-# 🔥 FIXED VERSION
-async def update_setting(guild_id, column, value):
+async def ensure_row(guild_id):
     await db.execute(
         "INSERT INTO guild_settings (guild_id) VALUES ($1) "
         "ON CONFLICT (guild_id) DO NOTHING",
         guild_id
     )
+
+async def get_settings(guild_id):
+    await ensure_row(guild_id)
+    return await db.fetchrow("SELECT * FROM guild_settings WHERE guild_id=$1", guild_id)
+
+async def update_setting(guild_id, column, value):
+    await ensure_row(guild_id)
     await db.execute(
         f"UPDATE guild_settings SET {column}=$1 WHERE guild_id=$2",
         value, guild_id
@@ -86,19 +84,13 @@ async def log(guild, embed, file=None):
     if channel:
         await channel.send(embed=embed, file=file)
 
-# ================= AUTOROLE =================
-async def add_autorole(guild_id, role_id):
-    await db.execute("INSERT INTO autoroles (guild_id, role_id) VALUES ($1,$2)", guild_id, role_id)
-
-async def get_autoroles(guild_id):
-    rows = await db.fetch("SELECT role_id FROM autoroles WHERE guild_id=$1", guild_id)
-    return [r["role_id"] for r in rows]
-
 # ================= RULES =================
 def rules_embed():
-    e = discord.Embed(title="📜 Server Rules",
-                      description="By staying you agree to follow these rules.",
-                      color=discord.Color.red())
+    e = discord.Embed(
+        title="📜 Server Rules",
+        description="By staying you agree to follow these rules.",
+        color=discord.Color.red()
+    )
     e.add_field(name="Respect", value="No harassment.", inline=False)
     e.add_field(name="No Spam", value="No flooding.", inline=False)
     e.add_field(name="No NSFW", value="Keep content safe.", inline=False)
@@ -114,7 +106,7 @@ class VerifyView(View):
         settings = await get_settings(interaction.guild.id)
         role = interaction.guild.get_role(settings["verified_role"])
         if not role:
-            return await interaction.response.send_message(embed=error("Error","Role missing."),ephemeral=True)
+            return await interaction.response.send_message(embed=error("Error","Role not set."),ephemeral=True)
 
         await interaction.user.add_roles(role)
         await interaction.response.send_message(embed=success("Verified","Access granted."),ephemeral=True)
@@ -160,7 +152,7 @@ class TicketView(View):
         settings = await get_settings(interaction.guild.id)
         category = interaction.guild.get_channel(settings["ticket_category"])
         if not category:
-            return await interaction.response.send_message(embed=error("Ticket not setup","Run !setup ticket"),ephemeral=True)
+            return await interaction.response.send_message(embed=error("Not Setup","Run !setup ticket"),ephemeral=True)
 
         channel = await interaction.guild.create_text_channel(
             f"ticket-{interaction.user.name}", category=category)
@@ -186,17 +178,11 @@ async def on_member_join(member):
     if settings["welcome_channel"]:
         ch = member.guild.get_channel(settings["welcome_channel"])
         if ch:
-            await ch.send(embed=success("New Member Joined", member.mention))
-
-    # Autoroles
-    autorole_ids = await get_autoroles(member.guild.id)
-    roles = [member.guild.get_role(r) for r in autorole_ids if member.guild.get_role(r)]
-    if roles:
-        await member.add_roles(*roles)
+            await ch.send(embed=success("New Member", member.mention))
 
     await log(member.guild, log_embed("Member Joined", member.mention))
 
-# ================= DYNO STYLE ROLE =================
+# ================= ROLE TOGGLE =================
 @bot.command(name="role")
 @commands.has_permissions(manage_roles=True)
 async def role_toggle(ctx, member: discord.Member, role: discord.Role):
@@ -212,39 +198,37 @@ async def role_toggle(ctx, member: discord.Member, role: discord.Role):
 
     await log(ctx.guild, log_embed("Role Toggled", f"{member.mention} → {role.mention}"))
 
-# ================= SETUPALL =================
+# ================= SETUP SERVER =================
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def setupall(ctx):
+async def setupserver(ctx):
     guild = ctx.guild
 
-    await ctx.send("Starting setup...")
+    await ctx.send(embed=info("Server Setup", "Creating structure..."))
 
-    # 🔥 Force create row FIRST
-    await db.execute(
-        "INSERT INTO guild_settings (guild_id) VALUES ($1) "
-        "ON CONFLICT (guild_id) DO NOTHING",
-        guild.id
-    )
-
-    verified_role = await guild.create_role(name="Verified")
+    await guild.create_role(name="Verified")
+    await guild.create_role(name="Unverified")
+    await guild.create_role(name="Support")
 
     info_cat = await guild.create_category("📌 Information")
     mod_cat = await guild.create_category("🛡 Moderation")
     ticket_cat = await guild.create_category("🎫 Tickets")
 
-    rules_ch = await guild.create_text_channel("rules", category=info_cat)
-    welcome_ch = await guild.create_text_channel("welcome", category=info_cat)
-    verify_ch = await guild.create_text_channel("verify", category=info_cat)
-    logs_ch = await guild.create_text_channel("logs", category=mod_cat)
-    ticket_panel = await guild.create_text_channel("ticket-panel", category=ticket_cat)
+    await guild.create_text_channel("rules", category=info_cat)
+    await guild.create_text_channel("welcome", category=info_cat)
+    await guild.create_text_channel("verify", category=info_cat)
+    await guild.create_text_channel("logs", category=mod_cat)
+    await guild.create_text_channel("ticket-panel", category=ticket_cat)
 
-    await update_setting(guild.id, "welcome_channel", welcome_ch.id)
-    await update_setting(guild.id, "logs_channel", logs_ch.id)
-    await update_setting(guild.id, "rules_channel", rules_ch.id)
-    await update_setting(guild.id, "verify_channel", verify_ch.id)
-    await update_setting(guild.id, "verified_role", verified_role.id)
-    await update_setting(guild.id, "ticket_category", ticket_cat.id)
+    await ctx.send(embed=success(
+        "Structure Created",
+        "Now configure with:\n"
+        "`!setup logs #logs`\n"
+        "`!setup welcome #welcome`\n"
+        "`!setup rules #rules`\n"
+        "`!setup verify #verify`\n"
+        "`!setup verifiedrole @Verified`\n"
+        "`!setup ticket #Tickets`"
+    ))
 
-    await ctx.send("Setup finished.")
 bot.run(TOKEN)
