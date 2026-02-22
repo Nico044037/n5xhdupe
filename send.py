@@ -3,8 +3,10 @@ import asyncpg
 import discord
 from discord.ext import commands
 from discord.ui import View, Modal, TextInput
-from datetime import datetime
+from datetime import timedelta
 import io
+import re
+from discord import app_commands
 
 # ================= ENV =================
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -13,6 +15,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.moderation = True
 
 bot = commands.Bot(command_prefix=["!", "?", "$"], intents=intents, help_command=None)
 
@@ -24,6 +27,18 @@ def success(t,d): return discord.Embed(title=f"✅ {t}",description=d,color=disc
 def error(t,d): return discord.Embed(title=f"❌ {t}",description=d,color=discord.Color.red())
 def info(t,d): return discord.Embed(title=f"ℹ️ {t}",description=d,color=discord.Color.blurple())
 def log_embed(t,d): return discord.Embed(title=f"📜 {t}",description=d,color=discord.Color.orange())
+
+# ================= DURATION PARSER =================
+def parse_duration(duration: str):
+    match = re.match(r"(\d+)([smhd])", duration.lower())
+    if not match:
+        return None
+    value, unit = int(match.group(1)), match.group(2)
+    if unit == "s": return timedelta(seconds=value)
+    if unit == "m": return timedelta(minutes=value)
+    if unit == "h": return timedelta(hours=value)
+    if unit == "d": return timedelta(days=value)
+    return None
 
 # ================= DATABASE =================
 @bot.event
@@ -53,8 +68,9 @@ async def on_ready():
     bot.add_view(VerifyView())
     bot.add_view(TicketView())
     bot.add_view(CloseView())
+    await bot.tree.sync()
 
-    print("Bot ready.")
+    print(f"Bot ready as {bot.user}")
 
 async def ensure_row(guild_id):
     await db.execute(
@@ -106,8 +122,10 @@ class VerifyView(View):
         settings = await get_settings(interaction.guild.id)
         role = interaction.guild.get_role(settings["verified_role"])
         if not role:
-            return await interaction.response.send_message(embed=error("Error","Role not set."),ephemeral=True)
-
+            return await interaction.response.send_message(
+                embed=error("Error","Verified role not set. Use !setup verifiedrole @role"),
+                ephemeral=True
+            )
         await interaction.user.add_roles(role)
         await interaction.response.send_message(embed=success("Verified","Access granted."),ephemeral=True)
         await log(interaction.guild, log_embed("User Verified", interaction.user.mention))
@@ -128,10 +146,11 @@ class CloseModal(Modal):
 
     async def on_submit(self, interaction):
         transcript = await create_transcript(self.channel)
-        await log(interaction.guild,
-                  log_embed("Ticket Closed",
-                            f"{self.channel.name}\nReason: {self.reason.value}"),
-                  transcript)
+        await log(
+            interaction.guild,
+            log_embed("Ticket Closed", f"{self.channel.name}\nReason: {self.reason.value}"),
+            transcript
+        )
         await self.channel.delete()
 
 class CloseView(View):
@@ -141,7 +160,10 @@ class CloseView(View):
     async def close_ticket(self, interaction, button):
         owner = ticket_owners.get(interaction.channel.id)
         if interaction.user.id != owner and not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(embed=error("Denied","Only owner/admin."),ephemeral=True)
+            return await interaction.response.send_message(
+                embed=error("Denied","Only ticket owner or admin."),
+                ephemeral=True
+            )
         await interaction.response.send_modal(CloseModal(interaction.channel))
 
 class TicketView(View):
@@ -152,7 +174,10 @@ class TicketView(View):
         settings = await get_settings(interaction.guild.id)
         category = interaction.guild.get_channel(settings["ticket_category"])
         if not category:
-            return await interaction.response.send_message(embed=error("Not Setup","Run !setup ticket"),ephemeral=True)
+            return await interaction.response.send_message(
+                embed=error("Not Setup","Use !setup ticket #category"),
+                ephemeral=True
+            )
 
         channel = await interaction.guild.create_text_channel(
             f"ticket-{interaction.user.name}", category=category)
@@ -164,6 +189,84 @@ class TicketView(View):
 
         await channel.send(embed=info("Ticket Opened","Describe your issue."), view=CloseView())
         await interaction.response.send_message(embed=success("Created",channel.mention),ephemeral=True)
+
+# ================= SETUP COMMAND (FULLY WORKING) =================
+@bot.command(name="setup")
+@commands.has_permissions(administrator=True)
+async def setup(ctx, setting: str, value):
+    setting = setting.lower()
+
+    if setting == "logs":
+        await update_setting(ctx.guild.id, "logs_channel", value.id)
+        await ctx.send(embed=success("Setup", f"Logs channel set to {value.mention}"))
+
+    elif setting == "welcome":
+        await update_setting(ctx.guild.id, "welcome_channel", value.id)
+        await ctx.send(embed=success("Setup", f"Welcome channel set to {value.mention}"))
+
+    elif setting == "verify":
+        await update_setting(ctx.guild.id, "verify_channel", value.id)
+        view = VerifyView()
+        await value.send(embed=info("Verification","Click the button to verify."), view=view)
+        await ctx.send(embed=success("Setup", f"Verify panel sent in {value.mention}"))
+
+    elif setting == "verifiedrole":
+        await update_setting(ctx.guild.id, "verified_role", value.id)
+        await ctx.send(embed=success("Setup", f"Verified role set to {value.mention}"))
+
+    elif setting == "rules":
+        await update_setting(ctx.guild.id, "rules_channel", value.id)
+        await value.send(embed=rules_embed())
+        await ctx.send(embed=success("Setup", f"Rules sent in {value.mention}"))
+
+    elif setting == "ticket":
+        await update_setting(ctx.guild.id, "ticket_category", value.id)
+        panel = discord.Embed(title="🎫 Support Tickets", description="Click below to open a ticket.", color=discord.Color.blurple())
+        await ctx.send(embed=panel, view=TicketView())
+        await ctx.send(embed=success("Setup", "Ticket panel created."))
+
+    else:
+        await ctx.send(embed=error("Invalid Option","Use: logs, welcome, verify, verifiedrole, rules, ticket"))
+
+# ================= MODERATION =================
+@bot.command(name="timeout")
+@commands.has_permissions(moderate_members=True)
+async def timeout_user(ctx, member: discord.Member, duration: str, *, reason: str = "No reason provided"):
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error","Cannot timeout this user."))
+
+    delta = parse_duration(duration)
+    if not delta:
+        return await ctx.send(embed=error("Invalid Duration","Use: 10m, 1h, 2d"))
+
+    until = discord.utils.utcnow() + delta
+    await member.timeout(until, reason=reason)
+
+    await ctx.send(embed=success("User Timed Out", f"{member.mention} for `{duration}`\nReason: {reason}"))
+    await log(ctx.guild, log_embed("User Timed Out", f"{member.mention} | {duration}\nReason: {reason}"))
+
+@bot.command(name="ban")
+@commands.has_permissions(ban_members=True)
+async def ban_user(ctx, member: discord.Member, *, reason: str = "No reason provided"):
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error","Cannot ban this user."))
+
+    await member.ban(reason=reason)
+    await ctx.send(embed=success("User Banned", f"{member.mention}\nReason: {reason}"))
+    await log(ctx.guild, log_embed("User Banned", f"{member.mention}\nReason: {reason}"))
+
+@bot.tree.command(name="kick", description="Kick a user")
+@app_commands.describe(user="User to kick", reason="Reason")
+async def kick_user(interaction: discord.Interaction, user: discord.Member, reason: str = "No reason provided"):
+    if not interaction.user.guild_permissions.kick_members:
+        return await interaction.response.send_message(embed=error("No Permission","Missing kick_members"),ephemeral=True)
+
+    if user.top_role >= interaction.guild.me.top_role:
+        return await interaction.response.send_message(embed=error("Hierarchy Error","Cannot kick this user."),ephemeral=True)
+
+    await user.kick(reason=reason)
+    await interaction.response.send_message(embed=success("User Kicked", f"{user.mention}\nReason: {reason}"))
+    await log(interaction.guild, log_embed("User Kicked", f"{user.mention}\nReason: {reason}"))
 
 # ================= EVENTS =================
 @bot.event
@@ -198,12 +301,11 @@ async def role_toggle(ctx, member: discord.Member, role: discord.Role):
 
     await log(ctx.guild, log_embed("Role Toggled", f"{member.mention} → {role.mention}"))
 
-# ================= SETUP SERVER =================
+# ================= AUTO SERVER STRUCTURE =================
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setupserver(ctx):
     guild = ctx.guild
-
     await ctx.send(embed=info("Server Setup", "Creating structure..."))
 
     await guild.create_role(name="Verified")
@@ -222,13 +324,13 @@ async def setupserver(ctx):
 
     await ctx.send(embed=success(
         "Structure Created",
-        "Now configure with:\n"
-        "`!setup logs #logs`\n"
-        "`!setup welcome #welcome`\n"
-        "`!setup rules #rules`\n"
-        "`!setup verify #verify`\n"
-        "`!setup verifiedrole @Verified`\n"
-        "`!setup ticket #Tickets`"
+        "Now run:\n"
+        "!setup logs #logs\n"
+        "!setup welcome #welcome\n"
+        "!setup rules #rules\n"
+        "!setup verify #verify\n"
+        "!setup verifiedrole @Verified\n"
+        "!setup ticket #Tickets"
     ))
 
 bot.run(TOKEN)
