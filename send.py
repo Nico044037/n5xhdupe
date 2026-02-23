@@ -27,7 +27,10 @@ def success(t, d): return discord.Embed(title=f"✅ {t}", description=d, color=d
 def error(t, d): return discord.Embed(title=f"❌ {t}", description=d, color=discord.Color.red())
 def info(t, d): return discord.Embed(title=f"ℹ️ {t}", description=d, color=discord.Color.blurple())
 def log_embed(t, d): return discord.Embed(title=f"📜 {t}", description=d, color=discord.Color.orange())
-
+# ================= BREAD COMMAND =================
+@bot.command(name="bread")
+async def bread(ctx):
+    await ctx.send("https://tenor.com/view/falling-toast-live-toast-reaction-toast-dies-gif-7238761997416289033")
 # ================= TEST COMMAND =================
 @bot.command()
 async def ping(ctx):
