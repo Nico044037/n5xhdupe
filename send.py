@@ -104,4 +104,4 @@ async def on_raw_reaction_add(payload):
                 except discord.Forbidden:
                     pass
 
-bot.run(os.getenv("TOKEN"))
+bot.run(os.getenv("DISCORD_TOKEN"))
