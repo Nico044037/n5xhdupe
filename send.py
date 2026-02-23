@@ -28,6 +28,11 @@ def error(t, d): return discord.Embed(title=f"❌ {t}", description=d, color=dis
 def info(t, d): return discord.Embed(title=f"ℹ️ {t}", description=d, color=discord.Color.blurple())
 def log_embed(t, d): return discord.Embed(title=f"📜 {t}", description=d, color=discord.Color.orange())
 
+# ================= TEST COMMAND =================
+@bot.command()
+async def ping(ctx):
+    await ctx.send("Pong! Bot is running.")
+
 # ================= DURATION PARSER =================
 def parse_duration(duration: str):
     match = re.match(r"(\d+)([smhd])", duration.lower())
@@ -44,38 +49,57 @@ def parse_duration(duration: str):
 @bot.event
 async def on_ready():
     global db
-    db = await asyncpg.create_pool(DATABASE_URL)
+    print("Starting bot...")
 
-    await db.execute("""
-    CREATE TABLE IF NOT EXISTS guild_settings (
-        guild_id BIGINT PRIMARY KEY,
-        welcome_channel BIGINT,
-        verify_channel BIGINT,
-        verified_role BIGINT,
-        logs_channel BIGINT,
-        rules_channel BIGINT,
-        ticket_category BIGINT
-    );
-    """)
+    if DATABASE_URL:
+        try:
+            db = await asyncpg.create_pool(DATABASE_URL)
+            await db.execute("""
+            CREATE TABLE IF NOT EXISTS guild_settings (
+                guild_id BIGINT PRIMARY KEY,
+                welcome_channel BIGINT,
+                verify_channel BIGINT,
+                verified_role BIGINT,
+                logs_channel BIGINT,
+                rules_channel BIGINT,
+                ticket_category BIGINT
+            );
+            """)
+            print("Database connected.")
+        except Exception as e:
+            print(f"Database failed: {e}")
+            db = None
+    else:
+        print("No DATABASE_URL provided. Running without database.")
 
     bot.add_view(VerifyView())
     bot.add_view(TicketView())
     bot.add_view(CloseView())
-    await bot.tree.sync()
+
+    try:
+        await bot.tree.sync()
+    except Exception as e:
+        print(f"Slash sync error: {e}")
 
     print(f"Bot ready as {bot.user}")
 
 async def ensure_row(guild_id):
+    if not db:
+        return
     await db.execute(
         "INSERT INTO guild_settings (guild_id) VALUES ($1) ON CONFLICT (guild_id) DO NOTHING",
         guild_id
     )
 
 async def get_settings(guild_id):
+    if not db:
+        return None
     await ensure_row(guild_id)
     return await db.fetchrow("SELECT * FROM guild_settings WHERE guild_id=$1", guild_id)
 
 async def update_setting(guild_id, column, value):
+    if not db:
+        return
     await ensure_row(guild_id)
     await db.execute(
         f"UPDATE guild_settings SET {column}=$1 WHERE guild_id=$2",
@@ -85,6 +109,8 @@ async def update_setting(guild_id, column, value):
 # ================= LOG SYSTEM =================
 async def log(guild, embed, file=None):
     settings = await get_settings(guild.id)
+    if not settings:
+        return
     channel_id = settings["logs_channel"]
     if not channel_id:
         return
@@ -100,6 +126,12 @@ class VerifyView(View):
     @discord.ui.button(label="Verify", style=discord.ButtonStyle.green)
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
         settings = await get_settings(interaction.guild.id)
+        if not settings:
+            return await interaction.response.send_message(
+                embed=error("Error", "Database not configured."),
+                ephemeral=True
+            )
+
         role = interaction.guild.get_role(settings["verified_role"])
 
         if not role:
@@ -114,10 +146,9 @@ class VerifyView(View):
                 embed=success("Verified", "Access granted."),
                 ephemeral=True
             )
-            await log(interaction.guild, log_embed("User Verified", interaction.user.mention))
         except discord.Forbidden:
             await interaction.response.send_message(
-                embed=error("Permission Error", "Bot cannot assign this role. Move bot role higher."),
+                embed=error("Permission Error", "Move my bot role above the verified role."),
                 ephemeral=True
             )
 
@@ -166,6 +197,12 @@ class TicketView(View):
     @discord.ui.button(label="Create Ticket", style=discord.ButtonStyle.primary)
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         settings = await get_settings(interaction.guild.id)
+        if not settings:
+            return await interaction.response.send_message(
+                embed=error("Error", "Database not configured."),
+                ephemeral=True
+            )
+
         category = interaction.guild.get_channel(settings["ticket_category"])
 
         if not category:
@@ -190,43 +227,28 @@ class TicketView(View):
             ephemeral=True
         )
 
-# ================= FIXED ROLE TOGGLE (WORKING) =================
+# ================= ROLE TOGGLE =================
 @bot.command(name="role")
 @commands.has_permissions(manage_roles=True)
 async def role_toggle(ctx, member: discord.Member, role: discord.Role):
-    """Toggle a role on a member"""
+    if not ctx.guild.me.guild_permissions.manage_roles:
+        return await ctx.send(embed=error("Permission Error", "I need Manage Roles permission."))
+
+    if role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error", "Role is higher than my top role."))
+
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error", "User role is higher than mine."))
+
     try:
-        # Check bot permissions
-        if not ctx.guild.me.guild_permissions.manage_roles:
-            return await ctx.send(embed=error("Permission Error", "I need Manage Roles permission."))
-
-        # Check hierarchy
-        if role >= ctx.guild.me.top_role:
-            return await ctx.send(
-                embed=error("Hierarchy Error", "That role is higher than my highest role. Move my role above it.")
-            )
-
-        if member.top_role >= ctx.guild.me.top_role:
-            return await ctx.send(
-                embed=error("Hierarchy Error", "I cannot modify this user (their role is higher than mine).")
-            )
-
-        # Toggle logic
         if role in member.roles:
-            await member.remove_roles(role, reason=f"Role toggle by {ctx.author}")
-            await ctx.send(embed=success("Role Removed", f"Removed {role.mention} from {member.mention}"))
+            await member.remove_roles(role)
+            await ctx.send(embed=success("Role Removed", f"{role.mention} removed from {member.mention}"))
         else:
-            await member.add_roles(role, reason=f"Role toggle by {ctx.author}")
-            await ctx.send(embed=success("Role Added", f"Added {role.mention} to {member.mention}"))
-
-        await log(ctx.guild, log_embed("Role Toggled", f"{member.mention} → {role.mention}"))
-
+            await member.add_roles(role)
+            await ctx.send(embed=success("Role Added", f"{role.mention} added to {member.mention}"))
     except discord.Forbidden:
-        await ctx.send(
-            embed=error("Discord Forbidden", "I don't have permission to manage this role.\n\nFix:\n1. Give me Manage Roles\n2. Move my role above the target role")
-        )
-    except Exception as e:
-        await ctx.send(embed=error("Unexpected Error", str(e)))
+        await ctx.send(embed=error("Forbidden", "Move my bot role above the target role."))
 
 # ================= ERROR HANDLER =================
 @bot.event
@@ -236,20 +258,8 @@ async def on_command_error(ctx, exc):
     elif isinstance(exc, commands.MissingRequiredArgument):
         await ctx.send(embed=error("Usage", "Correct usage: ?role @user @role"))
     elif isinstance(exc, commands.BadArgument):
-        await ctx.send(embed=error("Invalid Argument", "Make sure you mention a valid user and role."))
+        await ctx.send(embed=error("Invalid Argument", "Mention a valid user and role."))
     else:
         await ctx.send(embed=error("Error", str(exc)))
-
-# ================= MEMBER JOIN =================
-@bot.event
-async def on_member_join(member):
-    settings = await get_settings(member.guild.id)
-
-    if settings and settings["welcome_channel"]:
-        ch = member.guild.get_channel(settings["welcome_channel"])
-        if ch:
-            await ch.send(embed=success("New Member", member.mention))
-
-    await log(member.guild, log_embed("Member Joined", member.mention))
 
 bot.run(TOKEN)
