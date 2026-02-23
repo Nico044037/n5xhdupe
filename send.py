@@ -31,6 +31,11 @@ def log_embed(t, d): return discord.Embed(title=f"📜 {t}", description=d, colo
 @bot.command(name="bread")
 async def bread(ctx):
     await ctx.send("https://tenor.com/view/falling-toast-live-toast-reaction-toast-dies-gif-7238761997416289033")
+
+
+@bot.command(name="banana")
+async def banana(ctx):
+    await ctx.send("https://tenor.com/view/dancing-banana-gif-gif-5720216842034688392")
 # ================= TEST COMMAND =================
 @bot.command()
 async def ping(ctx):
