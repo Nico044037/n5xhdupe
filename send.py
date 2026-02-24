@@ -40,7 +40,66 @@ async def banana(ctx):
 @bot.command()
 async def ping(ctx):
     await ctx.send("Pong! Bot is running.")
+# ================= MODERATION COMMANDS =================
+@bot.command(name="ban")
+@commands.has_permissions(ban_members=True)
+async def ban_member(ctx, member: discord.Member, *, reason: str = "No reason provided"):
+    if not ctx.guild.me.guild_permissions.ban_members:
+        return await ctx.send(embed=error("Permission Error", "I need Ban Members permission."))
 
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error", "User role is higher than mine."))
+
+    try:
+        await member.ban(reason=reason)
+        await ctx.send(embed=success("User Banned", f"{member.mention} has been banned.\nReason: {reason}"))
+        await log(ctx.guild, log_embed("User Banned", f"{member} was banned by {ctx.author}\nReason: {reason}"))
+    except discord.Forbidden:
+        await ctx.send(embed=error("Forbidden", "I cannot ban this user due to role hierarchy."))
+
+
+@bot.command(name="kick")
+@commands.has_permissions(kick_members=True)
+async def kick_member(ctx, member: discord.Member, *, reason: str = "No reason provided"):
+    if not ctx.guild.me.guild_permissions.kick_members:
+        return await ctx.send(embed=error("Permission Error", "I need Kick Members permission."))
+
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error", "User role is higher than mine."))
+
+    try:
+        await member.kick(reason=reason)
+        await ctx.send(embed=success("User Kicked", f"{member.mention} has been kicked.\nReason: {reason}"))
+        await log(ctx.guild, log_embed("User Kicked", f"{member} was kicked by {ctx.author}\nReason: {reason}"))
+    except discord.Forbidden:
+        await ctx.send(embed=error("Forbidden", "I cannot kick this user due to role hierarchy."))
+
+
+@bot.command(name="timeout")
+@commands.has_permissions(moderate_members=True)
+async def timeout_member(ctx, member: discord.Member, duration: str, *, reason: str = "No reason provided"):
+    if not ctx.guild.me.guild_permissions.moderate_members:
+        return await ctx.send(embed=error("Permission Error", "I need Moderate Members permission."))
+
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.send(embed=error("Hierarchy Error", "User role is higher than mine."))
+
+    delta = parse_duration(duration)
+    if not delta:
+        return await ctx.send(embed=error("Invalid Duration", "Use formats like 10s, 5m, 2h, 1d"))
+
+    try:
+        await member.timeout(delta, reason=reason)
+        await ctx.send(embed=success(
+            "User Timed Out",
+            f"{member.mention} has been timed out for `{duration}`.\nReason: {reason}"
+        ))
+        await log(
+            ctx.guild,
+            log_embed("User Timed Out", f"{member} timed out by {ctx.author}\nDuration: {duration}\nReason: {reason}")
+        )
+    except discord.Forbidden:
+        await ctx.send(embed=error("Forbidden", "I cannot timeout this user due to role hierarchy."))
 # ================= DURATION PARSER =================
 def parse_duration(duration: str):
     match = re.match(r"(\d+)([smhd])", duration.lower())
