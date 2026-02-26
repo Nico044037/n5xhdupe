@@ -32,7 +32,49 @@ def log_embed(t, d): return discord.Embed(title=f"📜 {t}", description=d, colo
 async def bread(ctx):
     await ctx.send("https://tenor.com/view/falling-toast-live-toast-reaction-toast-dies-gif-7238761997416289033")
 
+# ================= AI PRIVATE CHANNEL =================
+@bot.command(name="ai")
+async def ai_channel(ctx):
+    guild = ctx.guild
+    user = ctx.author
 
+    # Optional: prevent duplicate AI channels for same user
+    existing = discord.utils.get(guild.text_channels, name=f"ai-{user.name}".lower())
+    if existing:
+        return await ctx.send(embed=info("AI Channel Exists", existing.mention))
+
+    # Find or create a category for AI channels
+    category = discord.utils.get(guild.categories, name="AI Channels")
+    if category is None:
+        try:
+            category = await guild.create_category("AI Channels")
+        except discord.Forbidden:
+            return await ctx.send(embed=error("Permission Error", "I need Manage Channels permission."))
+
+    try:
+        # Create private channel
+        channel = await guild.create_text_channel(
+            name=f"ai-{user.name}".lower(),
+            category=category,
+            topic=f"Private AI channel for {user}",
+        )
+
+        # Set permissions
+        await channel.set_permissions(guild.default_role, view_channel=False)
+        await channel.set_permissions(user, view_channel=True, send_messages=True, read_message_history=True)
+        await channel.set_permissions(guild.me, view_channel=True, send_messages=True)
+
+        await channel.send(
+            embed=info(
+                "AI Channel Created",
+                f"Hello {user.mention}! This is your private AI channel.\nOnly you and staff can see this."
+            )
+        )
+
+        await ctx.send(embed=success("Channel Created", channel.mention))
+
+    except discord.Forbidden:
+        await ctx.send(embed=error("Permission Error", "I need Manage Channels permission to create AI channels."))
 @bot.command(name="banana")
 async def banana(ctx):
     await ctx.send("https://tenor.com/view/dancing-banana-gif-gif-5720216842034688392")
