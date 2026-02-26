@@ -36,6 +36,27 @@ async def bread(ctx):
 @bot.command(name="banana")
 async def banana(ctx):
     await ctx.send("https://tenor.com/view/dancing-banana-gif-gif-5720216842034688392")
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def roleeveryone(ctx, role: discord.Role):
+    """Give a role to everyone in the server: ?roleeveryone @role"""
+    
+    await ctx.send(f"Adding {role.name} to everyone... This may take a while.")
+
+    success = 0
+    failed = 0
+
+    for member in ctx.guild.members:
+        if role not in member.roles:
+            try:
+                await member.add_roles(role, reason="Roleeveryone command used")
+                success += 1
+            except discord.Forbidden:
+                failed += 1
+            except discord.HTTPException:
+                failed += 1
+
+    await ctx.send(f"Done! ✅\nGiven role to {success} members.\nFailed: {failed}")
 # ================= TEST COMMAND =================
 @bot.command()
 async def ping(ctx):
